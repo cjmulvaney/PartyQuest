@@ -130,14 +130,16 @@ export default function CreateEvent() {
 
       if (data) {
         setCategories(data)
-        // Default: all selected
-        setSelectedTags(data.map((c) => c.name.toLowerCase()))
+        // Default: all selected (use category IDs for reliable filtering)
+        if (selectedTags.length === 0) {
+          setSelectedTags(data.map((c) => c.id))
+        }
       }
     }
     loadCategories()
   }, [])
 
-  // Count available missions when tags change
+  // Count available missions when selected categories change
   useEffect(() => {
     async function countMissions() {
       if (selectedTags.length === 0) {
@@ -149,7 +151,7 @@ export default function CreateEvent() {
         .from('missions')
         .select('id', { count: 'exact', head: true })
         .eq('active', true)
-        .overlaps('tags', selectedTags)
+        .in('category_id', selectedTags)
 
       setAvailableMissionCount(count || 0)
     }
@@ -402,7 +404,7 @@ export default function CreateEvent() {
       .eq('active', true)
 
     if (selectedTags.length > 0) {
-      query = query.overlaps('tags', selectedTags)
+      query = query.in('category_id', selectedTags)
     }
 
     const { data: missions } = await query
@@ -754,8 +756,7 @@ export default function CreateEvent() {
               </label>
               <div className="flex flex-wrap gap-2">
                 {categories.map((cat) => {
-                  const tag = cat.name.toLowerCase()
-                  const isSelected = selectedTags.includes(tag)
+                  const isSelected = selectedTags.includes(cat.id)
                   return (
                     <button
                       key={cat.id}
@@ -763,8 +764,8 @@ export default function CreateEvent() {
                       onClick={() => {
                         setSelectedTags((prev) =>
                           isSelected
-                            ? prev.filter((t) => t !== tag)
-                            : [...prev, tag]
+                            ? prev.filter((t) => t !== cat.id)
+                            : [...prev, cat.id]
                         )
                       }}
                       className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${

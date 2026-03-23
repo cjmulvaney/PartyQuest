@@ -400,10 +400,25 @@ export default function EventDetail() {
 
         {/* Participant table */}
         <div className="rounded-xl bg-white border border-stone-200 overflow-hidden mb-6">
-          <div className="px-4 py-3 border-b border-stone-100">
+          <div className="px-4 py-3 border-b border-stone-100 flex items-center justify-between">
             <h3 className="font-semibold text-stone-800">
               Participants ({participants.length})
             </h3>
+            {participants.length > 0 && (
+              <button
+                onClick={() => {
+                  const codes = participants
+                    .map((p) => `${p.name}: ${p.access_code}`)
+                    .join('\n')
+                  navigator.clipboard?.writeText(
+                    `Event: ${event.name}\nEvent Code: ${event.event_code}\n\nAccess Codes:\n${codes}`
+                  )
+                }}
+                className="text-emerald-700 text-xs font-medium hover:underline"
+              >
+                Copy All
+              </button>
+            )}
           </div>
 
           {participants.length === 0 ? (
@@ -414,9 +429,10 @@ export default function EventDetail() {
             <div className="divide-y divide-stone-100">
               {/* Table header */}
               <div className="grid grid-cols-12 px-4 py-2 text-xs text-stone-400 font-medium uppercase tracking-wider">
-                <div className="col-span-5">Name</div>
-                <div className="col-span-3 text-center">Joined</div>
-                <div className="col-span-4 text-right">Completed</div>
+                <div className="col-span-4">Name</div>
+                <div className="col-span-3">Access Code</div>
+                <div className="col-span-2 text-center">Joined</div>
+                <div className="col-span-3 text-right">Completed</div>
               </div>
 
               {participants.map((p) => (
@@ -424,17 +440,20 @@ export default function EventDetail() {
                   key={p.id}
                   className="grid grid-cols-12 px-4 py-3 items-center text-sm"
                 >
-                  <div className="col-span-5 text-stone-800 truncate">
+                  <div className="col-span-4 text-stone-800 truncate">
                     {p.name}
                   </div>
-                  <div className="col-span-3 text-center">
+                  <div className="col-span-3 font-mono text-stone-500 text-xs tracking-wide">
+                    {p.access_code}
+                  </div>
+                  <div className="col-span-2 text-center">
                     {p.joined_at ? (
                       <span className="text-emerald-600 font-medium">Yes</span>
                     ) : (
                       <span className="text-stone-300">&mdash;</span>
                     )}
                   </div>
-                  <div className="col-span-4 text-right text-stone-600">
+                  <div className="col-span-3 text-right text-stone-600">
                     {p.completed} / {p.total}
                   </div>
                 </div>
@@ -451,19 +470,6 @@ export default function EventDetail() {
             className="flex-1 py-3 rounded-xl bg-emerald-700 text-white font-semibold hover:bg-emerald-800 transition-colors text-sm disabled:opacity-50"
           >
             {cloning ? 'Cloning...' : 'Clone Event'}
-          </button>
-          <button
-            onClick={() => {
-              const codes = participants
-                .map((p) => `${p.name}: ${p.access_code}`)
-                .join('\n')
-              navigator.clipboard?.writeText(
-                `Event: ${event.name}\nCode: ${event.event_code}\n\n${codes}`
-              )
-            }}
-            className="flex-1 py-3 rounded-xl border border-stone-300 text-stone-600 font-semibold hover:bg-stone-200 transition-colors text-sm"
-          >
-            Copy All Codes
           </button>
         </div>
 
