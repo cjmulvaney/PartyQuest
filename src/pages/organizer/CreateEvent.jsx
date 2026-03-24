@@ -54,6 +54,9 @@ export default function CreateEvent() {
   const [generatedParticipants, setGeneratedParticipants] = useState([])
   const [launched, setLaunched] = useState(false)
   const [createdEventId, setCreatedEventId] = useState(null)
+  // Copy toast
+  const [copyToast, setCopyToast] = useState('')
+  const [copiedKey, setCopiedKey] = useState('')
 
   // Set default times (today evening)
   useEffect(() => {
@@ -411,9 +414,6 @@ export default function CreateEvent() {
       await supabase.from('participant_missions').insert(allRows)
     }
   }
-
-  const [copyToast, setCopyToast] = useState('')
-  const [copiedKey, setCopiedKey] = useState('')
 
   function copyWithToast(text, label, key) {
     navigator.clipboard?.writeText(text)
