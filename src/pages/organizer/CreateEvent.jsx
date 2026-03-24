@@ -412,12 +412,20 @@ export default function CreateEvent() {
     }
   }
 
+  const [copyToast, setCopyToast] = useState('')
+
+  function copyWithToast(text, label) {
+    navigator.clipboard?.writeText(text)
+    setCopyToast(label || 'Copied!')
+    setTimeout(() => setCopyToast(''), 2000)
+  }
+
   function copyAllCodes() {
     const lines = generatedParticipants
       .map((p) => `${p.name}: ${p.accessCode}`)
       .join('\n')
     const text = `Event: ${eventName}\nEvent Code: ${eventCode}\n\nParticipant Access Codes:\n${lines}`
-    navigator.clipboard?.writeText(text)
+    copyWithToast(text, 'All codes copied!')
   }
 
   const totalMissionsNeeded = participantCount * missionCount
@@ -924,6 +932,15 @@ export default function CreateEvent() {
           </div>
         )}
       </div>
+
+      {/* Copy toast */}
+      {copyToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-slide-down">
+          <div className="bg-stone-800 text-white px-5 py-2.5 rounded-xl shadow-lg text-sm font-medium">
+            {copyToast}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import Leaderboard from '../components/Leaderboard.jsx'
+import ActivityFeed from '../components/ActivityFeed.jsx'
 
 export default function Spectator() {
   const navigate = useNavigate()
@@ -9,6 +10,7 @@ export default function Spectator() {
   const [event, setEvent] = useState(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [tab, setTab] = useState('leaderboard')
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -17,7 +19,7 @@ export default function Spectator() {
 
     const { data, error: fetchError } = await supabase
       .from('events')
-      .select('id, name, anonymity_enabled, status')
+      .select('id, name, anonymity_enabled, status, feed_mode')
       .eq('event_code', eventCode.toUpperCase().trim())
       .in('status', ['active', 'upcoming'])
       .single()
@@ -48,11 +50,38 @@ export default function Spectator() {
               Exit
             </button>
           </div>
-          <Leaderboard
-            eventId={event.id}
-            anonymity={event.anonymity_enabled}
-            fullscreen
-          />
+
+          {/* Tabs */}
+          <div className="flex border-b border-stone-200 mb-6">
+            {['leaderboard', 'feed'].map((t) => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`flex-1 py-2 text-center text-sm font-medium transition-colors ${
+                  tab === t
+                    ? 'text-emerald-700 border-b-2 border-emerald-700'
+                    : 'text-stone-400 hover:text-stone-600'
+                }`}
+              >
+                {t === 'leaderboard' ? 'Leaderboard' : 'Feed'}
+              </button>
+            ))}
+          </div>
+
+          {tab === 'leaderboard' && (
+            <Leaderboard
+              eventId={event.id}
+              anonymity={event.anonymity_enabled}
+              fullscreen
+            />
+          )}
+
+          {tab === 'feed' && (
+            <ActivityFeed
+              eventId={event.id}
+              feedMode={event.feed_mode || 'secret'}
+            />
+          )}
         </div>
       </div>
     )
@@ -70,7 +99,7 @@ export default function Spectator() {
 
         <h1 className="text-3xl font-bold text-emerald-700">Spectator View</h1>
         <p className="text-stone-500 text-sm">
-          Enter the event code to view the leaderboard.
+          Enter the event code to view the leaderboard and activity feed.
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -89,7 +118,7 @@ export default function Spectator() {
             disabled={loading || eventCode.trim().length < 3}
             className="w-full py-3 rounded-xl bg-emerald-700 text-white font-semibold text-lg hover:bg-emerald-800 active:bg-emerald-900 transition-colors disabled:opacity-50"
           >
-            {loading ? 'Loading...' : 'View Leaderboard'}
+            {loading ? 'Loading...' : 'Watch Event'}
           </button>
         </form>
       </div>

@@ -10,10 +10,16 @@ export default function Register() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(null)
+  const [copyToast, setCopyToast] = useState('')
+
+  function copyWithToast(text, label) {
+    navigator.clipboard?.writeText(text)
+    setCopyToast(label || 'Copied!')
+    setTimeout(() => setCopyToast(''), 2000)
+  }
 
   // Form fields
   const [name, setName] = useState('')
-  const [phone, setPhone] = useState('')
 
   useEffect(() => {
     async function loadEvent() {
@@ -78,7 +84,6 @@ export default function Register() {
           access_code: accessCode,
           joined_at: new Date().toISOString(),
           source: 'self',
-          phone: phone.trim() || null,
         })
         .select()
         .single()
@@ -172,7 +177,7 @@ export default function Register() {
                 {success.accessCode}
               </p>
               <p className="text-emerald-600 text-xs mt-1">
-                Save this code — you'll need it to rejoin
+                Screenshot or write this down — you'll need it to rejoin
               </p>
             </div>
           </div>
@@ -185,12 +190,21 @@ export default function Register() {
           </button>
 
           <button
-            onClick={() => navigator.clipboard?.writeText(success.accessCode)}
+            onClick={() => copyWithToast(success.accessCode, 'Access code copied!')}
             className="w-full py-3 rounded-xl border border-stone-300 text-stone-600 font-medium hover:bg-stone-200 transition-colors"
           >
             Copy Access Code
           </button>
         </div>
+
+        {/* Copy toast */}
+        {copyToast && (
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-slide-down">
+            <div className="bg-stone-800 text-white px-5 py-2.5 rounded-xl shadow-lg text-sm font-medium">
+              {copyToast}
+            </div>
+          </div>
+        )}
       </div>
     )
   }
@@ -229,19 +243,6 @@ export default function Register() {
               placeholder="Enter your name"
               className="w-full px-4 py-3 rounded-xl border border-stone-300 bg-white text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-transparent"
               autoFocus
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-stone-600 mb-1">
-              Phone Number (optional)
-            </label>
-            <input
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="(555) 123-4567"
-              className="w-full px-4 py-3 rounded-xl border border-stone-300 bg-white text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-transparent"
             />
           </div>
 

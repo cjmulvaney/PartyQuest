@@ -29,6 +29,14 @@ export default function EventDetail() {
   // Add participant inline
   const [addingParticipant, setAddingParticipant] = useState(false)
   const [newParticipantName, setNewParticipantName] = useState('')
+  // Copy toast
+  const [copyToast, setCopyToast] = useState('')
+
+  function copyWithToast(text, label) {
+    navigator.clipboard?.writeText(text)
+    setCopyToast(label || 'Copied!')
+    setTimeout(() => setCopyToast(''), 2000)
+  }
 
   const loadData = useCallback(async () => {
     // Get event
@@ -569,7 +577,7 @@ export default function EventDetail() {
               </p>
             </div>
             <button
-              onClick={() => navigator.clipboard?.writeText(event.event_code)}
+              onClick={() => copyWithToast(event.event_code, 'Event code copied!')}
               className="text-emerald-700 text-sm font-medium hover:underline"
             >
               Copy
@@ -585,7 +593,7 @@ export default function EventDetail() {
                   {inviteLink}
                 </p>
                 <button
-                  onClick={() => navigator.clipboard?.writeText(inviteLink)}
+                  onClick={() => copyWithToast(inviteLink, 'Invite link copied!')}
                   className="text-emerald-700 text-xs font-medium hover:underline shrink-0"
                 >
                   Copy Link
@@ -711,8 +719,9 @@ export default function EventDetail() {
                     const codes = activeParticipants
                       .map((p) => `${p.name}: ${p.access_code}`)
                       .join('\n')
-                    navigator.clipboard?.writeText(
-                      `Event: ${event.name}\nEvent Code: ${event.event_code}\n\nAccess Codes:\n${codes}`
+                    copyWithToast(
+                      `Event: ${event.name}\nEvent Code: ${event.event_code}\n\nAccess Codes:\n${codes}`,
+                      'All codes copied!'
                     )
                   }}
                   className="text-emerald-700 text-xs font-medium hover:underline"
@@ -782,24 +791,29 @@ export default function EventDetail() {
 
             {/* Add participant inline */}
             {!isEnded && (
-              <div className="px-4 py-3 border-t border-stone-100 flex items-center gap-2">
-                <input
-                  type="text"
-                  value={newParticipantName}
-                  onChange={(e) => setNewParticipantName(e.target.value)}
-                  placeholder="Add participant name..."
-                  className="flex-1 px-3 py-2 rounded-lg border border-stone-300 bg-white text-stone-800 text-sm placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-transparent"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleAddParticipant()
-                  }}
-                />
-                <button
-                  onClick={handleAddParticipant}
-                  disabled={addingParticipant || !newParticipantName.trim()}
-                  className="px-4 py-2 rounded-lg bg-emerald-700 text-white text-sm font-medium hover:bg-emerald-800 transition-colors disabled:opacity-50"
-                >
-                  {addingParticipant ? '...' : 'Add'}
-                </button>
+              <div className="px-4 py-3 border-t border-stone-100">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={newParticipantName}
+                    onChange={(e) => setNewParticipantName(e.target.value)}
+                    placeholder="Add participant name..."
+                    className="flex-1 px-3 py-2 rounded-lg border border-stone-300 bg-white text-stone-800 text-sm placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-transparent"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleAddParticipant()
+                    }}
+                  />
+                  <button
+                    onClick={handleAddParticipant}
+                    disabled={addingParticipant || !newParticipantName.trim()}
+                    className="px-4 py-2 rounded-lg bg-emerald-700 text-white text-sm font-medium hover:bg-emerald-800 transition-colors disabled:opacity-50"
+                  >
+                    {addingParticipant ? '...' : 'Add'}
+                  </button>
+                </div>
+                <p className="text-stone-400 text-xs mt-2">
+                  Or share the <button onClick={() => { setActiveTab('participants'); copyWithToast(inviteLink, 'Invite link copied!') }} className="text-emerald-700 font-medium hover:underline">invite link</button> and let participants register themselves.
+                </p>
               </div>
             )}
           </div>
@@ -879,6 +893,15 @@ export default function EventDetail() {
 
         {error && <p className="text-red-600 text-sm mt-4">{error}</p>}
       </div>
+
+      {/* Copy toast */}
+      {copyToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-slide-down">
+          <div className="bg-stone-800 text-white px-5 py-2.5 rounded-xl shadow-lg text-sm font-medium">
+            {copyToast}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
