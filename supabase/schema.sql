@@ -23,6 +23,8 @@ create table missions (
   category_id uuid references categories(id) on delete set null,
   tags text[] default '{}',
   active boolean default true,
+  -- V2.1: who created this mission
+  creator_name text,
   created_at timestamptz default now()
 );
 
@@ -40,6 +42,10 @@ create table events (
   email_opt_in boolean default false,
   organizer_email text,
   status text default 'upcoming' check (status in ('upcoming', 'active', 'ended')),
+  -- V2.1: feed_mode controls activity feed visibility ('secret' = hide mission text, 'transparent' = show mission text)
+  feed_mode text default 'secret' check (feed_mode in ('secret', 'transparent')),
+  -- V2.1: max participant count for self-registration (NULL = unlimited)
+  max_participants integer,
   created_at timestamptz default now()
 );
 
@@ -59,7 +65,13 @@ create table participants (
   event_id uuid references events(id) on delete cascade,
   name text not null,
   access_code text unique not null,
-  joined_at timestamptz
+  joined_at timestamptz,
+  -- V2.1: soft-delete support
+  is_active boolean default true,
+  -- V2.1: 'manual' = organizer-added, 'self' = self-registered via invite link
+  source text default 'manual' check (source in ('manual', 'self')),
+  -- V2.1: phone number (optional, collected during self-registration)
+  phone text
 );
 
 -- Participant missions (assigned missions per participant)
@@ -133,6 +145,11 @@ create policy "Organizers can update their own events"
   on events for update
   using (auth.uid() = organizer_id);
 
+-- V2.1: Organizers can delete their own events
+create policy "Organizers can delete their own events"
+  on events for delete
+  using (auth.uid() = organizer_id);
+
 -- Event config: readable by anyone, writable by organizer
 create policy "Event config is publicly readable"
   on event_config for select
@@ -148,6 +165,15 @@ create policy "Organizers can insert event config"
 
 create policy "Organizers can update event config"
   on event_config for update
+  using (
+    exists (
+      select 1 from events where events.id = event_config.event_id and events.organizer_id = auth.uid()
+    )
+  );
+
+-- V2.1: Organizers can delete event config (cascades from event delete)
+create policy "Organizers can delete event config"
+  on event_config for delete
   using (
     exists (
       select 1 from events where events.id = event_config.event_id and events.organizer_id = auth.uid()

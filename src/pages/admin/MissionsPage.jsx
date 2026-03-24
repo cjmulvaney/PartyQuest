@@ -21,6 +21,7 @@ export default function MissionsPage() {
   const [newText, setNewText] = useState('')
   const [newCategory, setNewCategory] = useState('')
   const [newTags, setNewTags] = useState('')
+  const [newCreatorName, setNewCreatorName] = useState('')
 
   useEffect(() => {
     loadData()
@@ -30,7 +31,7 @@ export default function MissionsPage() {
     const [{ data: m }, { data: c }] = await Promise.all([
       supabase
         .from('missions')
-        .select('id, text, active, tags, category_id, categories(name)')
+        .select('id, text, active, tags, category_id, creator_name, categories(name)')
         .order('created_at', { ascending: false }),
       supabase.from('categories').select('id, name, description').order('name'),
     ])
@@ -89,13 +90,15 @@ export default function MissionsPage() {
         category_id: newCategory,
         tags: tagArr,
         active: true,
+        creator_name: newCreatorName.trim() || null,
       })
-      .select('id, text, active, tags, category_id, categories(name)')
+      .select('id, text, active, tags, category_id, creator_name, categories(name)')
       .single()
     if (!error && data) {
       setMissions((prev) => [data, ...prev])
       setNewText('')
       setNewTags('')
+      setNewCreatorName('')
       setShowAdd(false)
     }
   }
@@ -375,6 +378,13 @@ export default function MissionsPage() {
               className="flex-1 px-3 py-2 rounded-lg border border-stone-300 text-sm text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-600"
             />
           </div>
+          <input
+            type="text"
+            value={newCreatorName}
+            onChange={(e) => setNewCreatorName(e.target.value)}
+            placeholder="Who's creating this mission? (optional)"
+            className="w-full px-3 py-2 rounded-lg border border-stone-300 text-sm text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+          />
           <div className="flex gap-2">
             <button
               onClick={addMission}

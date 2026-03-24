@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase.js'
 import MissionCard from '../components/MissionCard.jsx'
 import LockedMission from '../components/LockedMission.jsx'
 import Leaderboard from '../components/Leaderboard.jsx'
+import ActivityFeed from '../components/ActivityFeed.jsx'
 import CompletionModal from '../components/CompletionModal.jsx'
 import FeedbackButton from '../components/FeedbackButton.jsx'
 
@@ -40,7 +41,7 @@ export default function Play() {
     // Get event
     const { data: evt } = await supabase
       .from('events')
-      .select('id, name, status, anonymity_enabled')
+      .select('id, name, status, anonymity_enabled, feed_mode')
       .eq('id', part.event_id)
       .single()
 
@@ -186,6 +187,10 @@ export default function Play() {
         {tab === 'leaderboard' && event && (
           <Leaderboard eventId={event.id} anonymity={event.anonymity_enabled} />
         )}
+
+        {tab === 'feed' && event && (
+          <ActivityFeed eventId={event.id} feedMode={event.feed_mode || 'secret'} />
+        )}
       </div>
 
       {/* Toast notification */}
@@ -232,26 +237,19 @@ export default function Play() {
       {/* Tab bar */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-stone-200">
         <div className="max-w-md mx-auto flex">
-          <button
-            onClick={() => setTab('missions')}
-            className={`flex-1 py-3 text-center font-medium text-sm transition-colors ${
-              tab === 'missions'
-                ? 'text-emerald-700 border-t-2 border-emerald-700'
-                : 'text-stone-400 hover:text-stone-600'
-            }`}
-          >
-            Missions
-          </button>
-          <button
-            onClick={() => setTab('leaderboard')}
-            className={`flex-1 py-3 text-center font-medium text-sm transition-colors ${
-              tab === 'leaderboard'
-                ? 'text-emerald-700 border-t-2 border-emerald-700'
-                : 'text-stone-400 hover:text-stone-600'
-            }`}
-          >
-            Leaderboard
-          </button>
+          {['missions', 'leaderboard', 'feed'].map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`flex-1 py-3 text-center font-medium text-sm transition-colors ${
+                tab === t
+                  ? 'text-emerald-700 border-t-2 border-emerald-700'
+                  : 'text-stone-400 hover:text-stone-600'
+              }`}
+            >
+              {t === 'missions' ? 'Missions' : t === 'leaderboard' ? 'Leaderboard' : 'Feed'}
+            </button>
+          ))}
         </div>
       </div>
     </div>

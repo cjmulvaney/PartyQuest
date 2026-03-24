@@ -17,13 +17,14 @@ const HOW_HEARD_OPTIONS = ['Friend', 'Social media', 'Search', 'Other']
 export default function CreateEvent() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const draftId = searchParams.get('draft')
+  const editId = searchParams.get('edit')
   const { user, loading: authLoading, signInWithGoogle } = useAuth()
   const [step, setStep] = useState(1)
   const [error, setError] = useState('')
   const [launching, setLaunching] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [savedDraftId, setSavedDraftId] = useState(draftId || null)
+  const [isEditMode, setIsEditMode] = useState(false)
+  const [editEventId, setEditEventId] = useState(editId || null)
+  const [editEventStatus, setEditEventStatus] = useState(null)
   const textareaRef = useRef(null)
 
   // Step 1 — Event Basics
@@ -73,18 +74,20 @@ export default function CreateEvent() {
     }
   }, [user])
 
-  // Load draft if editing
+  // Load event data if editing
   useEffect(() => {
-    if (!draftId || !user) return
-    async function loadDraft() {
+    if (!editId || !user) return
+    async function loadEvent() {
       const { data } = await supabase
         .from('events')
         .select('*, event_config(*)')
-        .eq('id', draftId)
+        .eq('id', editId)
         .eq('organizer_id', user.id)
-        .eq('status', 'draft')
         .single()
       if (!data) return
+      setIsEditMode(true)
+      setEditEventId(data.id)
+      setEditEventStatus(data.status)
       setEventName(data.name || '')
       setEventType(data.event_type ? data.event_type.charAt(0).toUpperCase() + data.event_type.slice(1) : 'House Party')
       if (data.start_time) setStartTime(formatDateTimeLocal(new Date(data.start_time)))
@@ -93,24 +96,26 @@ export default function CreateEvent() {
       setEmailOptIn(data.email_opt_in || false)
       setOrganizerEmail(data.organizer_email || user.email || '')
       setAnonymityEnabled(data.anonymity_enabled || false)
-      // Load participant names from draft_data
-      if (data.draft_data) {
-        setParticipantCount(data.draft_data.participantCount || 10)
-        setParticipantNames(data.draft_data.participantNames || '')
-        setMissionCount(data.draft_data.missionCount || 3)
-        setUnlockType(data.draft_data.unlockType || 'all_at_once')
-        setUnlockTimes(data.draft_data.unlockTimes || ['', ''])
-        if (data.draft_data.selectedTags) setSelectedTags(data.draft_data.selectedTags)
-        if (data.draft_data.step) setStep(data.draft_data.step)
-      } else if (data.event_config?.[0]) {
+      if (data.event_config?.[0]) {
         const config = data.event_config[0]
         setMissionCount(config.mission_count || 3)
         setUnlockType(config.unlock_type || 'all_at_once')
         if (config.tag_filters) setSelectedTags(config.tag_filters)
       }
+      // Load existing participant names
+      const { data: parts } = await supabase
+        .from('participants')
+        .select('name')
+        .eq('event_id', editId)
+        .eq('is_active', true)
+        .order('name')
+      if (parts && parts.length > 0) {
+        setParticipantCount(parts.length)
+        setParticipantNames(parts.map(p => p.name).join('\n'))
+      }
     }
-    loadDraft()
-  }, [draftId, user])
+    loadEvent()
+  }, [editId, user])
 
   // Auto-resize textarea
   useEffect(() => {
@@ -251,7 +256,6 @@ export default function CreateEvent() {
       const start = new Date(startTime)
       const status = start <= now ? 'active' : 'upcoming'
 
-      // Insert or update event (could be launching from a draft)
       let eventData
       const eventPayload = {
         organizer_id: user.id,
@@ -265,19 +269,39 @@ export default function CreateEvent() {
         email_opt_in: emailOptIn,
         organizer_email: emailOptIn ? organizerEmail : null,
         status,
-        draft_data: null, // Clear draft data on launch
       }
 
-      if (savedDraftId) {
+      if (isEditMode && editEventId) {
+        // Update existing event
         const { data, error: updateError } = await supabase
           .from('events')
           .update(eventPayload)
-          .eq('id', savedDraftId)
+          .eq('id', editEventId)
           .select()
           .single()
         if (updateError) throw updateError
         eventData = data
+
+        // Update event config
+        const schedule =
+          unlockType === 'timed'
+            ? unlockTimes.filter((t) => t.trim()).map((t) => new Date(t).toISOString())
+            : null
+
+        await supabase
+          .from('event_config')
+          .update({
+            mission_count: missionCount,
+            unlock_type: unlockType,
+            unlock_schedule: schedule,
+            tag_filters: selectedTags,
+          })
+          .eq('event_id', editEventId)
+
+        setCreatedEventId(eventData.id)
+        setLaunched(true)
       } else {
+        // Create new event
         const { data, error: insertError } = await supabase
           .from('events')
           .insert(eventPayload)
@@ -285,115 +309,50 @@ export default function CreateEvent() {
           .single()
         if (insertError) throw insertError
         eventData = data
-      }
 
+        // Insert event config
+        const schedule =
+          unlockType === 'timed'
+            ? unlockTimes.filter((t) => t.trim()).map((t) => new Date(t).toISOString())
+            : null
 
-      // Insert event config
-      const schedule =
-        unlockType === 'timed'
-          ? unlockTimes.filter((t) => t.trim()).map((t) => new Date(t).toISOString())
-          : null
+        const { error: configError } = await supabase
+          .from('event_config')
+          .insert({
+            event_id: eventData.id,
+            mission_count: missionCount,
+            unlock_type: unlockType,
+            unlock_schedule: schedule,
+            tag_filters: selectedTags,
+          })
 
-      const { error: configError } = await supabase
-        .from('event_config')
-        .insert({
+        if (configError) throw configError
+
+        // Insert participants
+        const participantRows = generatedParticipants.map((p) => ({
           event_id: eventData.id,
-          mission_count: missionCount,
-          unlock_type: unlockType,
-          unlock_schedule: schedule,
-          tag_filters: selectedTags,
-        })
+          name: p.name,
+          access_code: p.accessCode,
+        }))
 
-      if (configError) throw configError
+        const { data: insertedParticipants, error: partError } = await supabase
+          .from('participants')
+          .insert(participantRows)
+          .select()
 
-      // Insert participants
-      const participantRows = generatedParticipants.map((p) => ({
-        event_id: eventData.id,
-        name: p.name,
-        access_code: p.accessCode,
-      }))
+        if (partError) throw partError
 
-      const { data: insertedParticipants, error: partError } = await supabase
-        .from('participants')
-        .insert(participantRows)
-        .select()
+        // Assign missions to each participant
+        await assignMissionsToAll(insertedParticipants, eventData.id)
 
-      if (partError) throw partError
-
-      // Assign missions to each participant
-      await assignMissionsToAll(insertedParticipants, eventData.id)
-
-      setCreatedEventId(eventData.id)
-      setLaunched(true)
+        setCreatedEventId(eventData.id)
+        setLaunched(true)
+      }
     } catch (err) {
       setError(err.message || 'Failed to create event. Please try again.')
     }
 
     setLaunching(false)
-  }
-
-  async function saveDraft() {
-    setSaving(true)
-    setError('')
-    try {
-      const draftData = {
-        participantCount,
-        participantNames,
-        missionCount,
-        unlockType,
-        unlockTimes,
-        selectedTags,
-        step,
-      }
-
-      const eventPayload = {
-        organizer_id: user.id,
-        name: eventName.trim() || 'Untitled Event',
-        event_type: eventType.toLowerCase(),
-        start_time: startTime ? new Date(startTime).toISOString() : new Date().toISOString(),
-        end_time: endTime ? new Date(endTime).toISOString() : new Date().toISOString(),
-        event_code: savedDraftId ? undefined : generateCode(6),
-        anonymity_enabled: anonymityEnabled,
-        how_heard: howHeard || null,
-        email_opt_in: emailOptIn,
-        organizer_email: emailOptIn ? organizerEmail : null,
-        status: 'draft',
-        draft_data: draftData,
-      }
-
-      let eventId = savedDraftId
-
-      if (savedDraftId) {
-        // Update existing draft
-        delete eventPayload.event_code
-        const { error: updateError } = await supabase
-          .from('events')
-          .update(eventPayload)
-          .eq('id', savedDraftId)
-        if (updateError) throw updateError
-      } else {
-        // Create new draft
-        const { data, error: insertError } = await supabase
-          .from('events')
-          .insert(eventPayload)
-          .select()
-          .single()
-        if (insertError) throw insertError
-        eventId = data.id
-        setSavedDraftId(eventId)
-      }
-
-      setError('')
-      // Brief success feedback
-      const btn = document.getElementById('save-draft-btn')
-      if (btn) {
-        btn.textContent = 'Saved!'
-        setTimeout(() => { btn.textContent = 'Save Draft' }, 1500)
-      }
-    } catch (err) {
-      setError(err.message || 'Failed to save draft.')
-    }
-    setSaving(false)
   }
 
   async function assignMissionsToAll(participants, eventId) {
@@ -528,7 +487,8 @@ export default function CreateEvent() {
               <select
                 value={eventType}
                 onChange={(e) => setEventType(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border border-stone-300 bg-white text-stone-800 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-transparent"
+                disabled={isEditMode && editEventStatus === 'active'}
+                className="w-full px-4 py-3 rounded-xl border border-stone-300 bg-white text-stone-800 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-transparent disabled:opacity-50"
               >
                 {EVENT_TYPES.map((t) => (
                   <option key={t} value={t}>
@@ -536,6 +496,9 @@ export default function CreateEvent() {
                   </option>
                 ))}
               </select>
+              {isEditMode && editEventStatus === 'active' && (
+                <p className="text-stone-400 text-xs mt-1">Cannot change event type while active</p>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -667,6 +630,12 @@ export default function CreateEvent() {
           <div className="space-y-5">
             <h2 className="text-2xl font-bold text-stone-800">Missions</h2>
 
+            {isEditMode && editEventStatus === 'active' && (
+              <p className="text-amber-600 text-sm bg-amber-50 border border-amber-200 rounded-xl p-3">
+                Mission settings cannot be changed while the event is active.
+              </p>
+            )}
+
             <div>
               <label className="block text-sm font-medium text-stone-600 mb-2">
                 Missions per participant: {missionCount}
@@ -677,7 +646,8 @@ export default function CreateEvent() {
                 max={5}
                 value={missionCount}
                 onChange={(e) => setMissionCount(parseInt(e.target.value))}
-                className="w-full accent-emerald-700"
+                disabled={isEditMode && editEventStatus === 'active'}
+                className="w-full accent-emerald-700 disabled:opacity-50"
               />
               <div className="flex justify-between text-xs text-stone-400 mt-1">
                 <span>1</span>
@@ -923,6 +893,13 @@ export default function CreateEvent() {
           <p className="text-red-600 text-sm mt-4">{error}</p>
         )}
 
+        {/* Helper note for edit mode */}
+        {isEditMode && !launched && (
+          <p className="text-stone-400 text-xs text-center mt-4">
+            You can edit this event at any time before it goes live.
+          </p>
+        )}
+
         {/* Navigation buttons */}
         {!launched && (
           <div className="mt-8 space-y-3">
@@ -939,17 +916,11 @@ export default function CreateEvent() {
                 disabled={launching}
                 className="w-full py-3 rounded-xl bg-emerald-700 text-white font-semibold text-lg hover:bg-emerald-800 active:bg-emerald-900 transition-colors disabled:opacity-50"
               >
-                {launching ? 'Launching...' : 'Launch Event'}
+                {launching
+                  ? isEditMode ? 'Saving...' : 'Creating...'
+                  : isEditMode ? 'Save Changes' : 'Create Event'}
               </button>
             )}
-            <button
-              id="save-draft-btn"
-              onClick={saveDraft}
-              disabled={saving}
-              className="w-full py-3 rounded-xl border border-stone-300 text-stone-600 font-medium hover:bg-stone-200 transition-colors disabled:opacity-50"
-            >
-              {saving ? 'Saving...' : 'Save Draft'}
-            </button>
           </div>
         )}
       </div>

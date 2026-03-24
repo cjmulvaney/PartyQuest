@@ -55,7 +55,6 @@ export default function Dashboard() {
     )
   }
 
-  const draftEvents = events.filter((e) => e.status === 'draft')
   const activeEvents = events.filter(
     (e) => e.status === 'active' || e.status === 'upcoming'
   )
@@ -70,15 +69,23 @@ export default function Dashboard() {
             <h1 className="text-3xl font-bold text-emerald-700">Party Quest</h1>
             <p className="text-stone-400 text-sm mt-1">{user.email}</p>
           </div>
-          <button
-            onClick={async () => {
-              await signOut()
-              navigate('/')
-            }}
-            className="text-stone-400 text-sm hover:text-stone-600 transition-colors"
-          >
-            Sign out
-          </button>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => navigate('/join')}
+              className="text-emerald-700 text-sm font-medium hover:underline"
+            >
+              Join an Event
+            </button>
+            <button
+              onClick={async () => {
+                await signOut()
+                navigate('/')
+              }}
+              className="text-stone-400 text-sm hover:text-stone-600 transition-colors"
+            >
+              Sign out
+            </button>
+          </div>
         </div>
 
         {/* New Event button */}
@@ -93,24 +100,6 @@ export default function Dashboard() {
           <p className="text-stone-500 text-center py-8">Loading events...</p>
         ) : (
           <>
-            {/* Drafts */}
-            {draftEvents.length > 0 && (
-              <section className="mb-8">
-                <h2 className="text-lg font-semibold text-stone-700 mb-3">
-                  Drafts
-                </h2>
-                <div className="space-y-3">
-                  {draftEvents.map((event) => (
-                    <EventCard
-                      key={event.id}
-                      event={event}
-                      onClick={() => navigate(`/organizer/new?draft=${event.id}`)}
-                    />
-                  ))}
-                </div>
-              </section>
-            )}
-
             {/* Active Events */}
             <section className="mb-8">
               <h2 className="text-lg font-semibold text-stone-700 mb-3">
@@ -160,18 +149,14 @@ export default function Dashboard() {
 
 function EventCard({ event, onClick, isPast = false }) {
   const statusLabel =
-    event.status === 'draft'
-      ? 'Draft'
-      : event.status === 'active'
+    event.status === 'active'
       ? 'Live'
       : event.status === 'upcoming'
       ? 'Upcoming'
       : 'Ended'
 
   const statusColor =
-    event.status === 'draft'
-      ? 'text-blue-500'
-      : event.status === 'active'
+    event.status === 'active'
       ? 'text-emerald-600'
       : event.status === 'upcoming'
       ? 'text-amber-600'

@@ -2,6 +2,7 @@ import { Routes, Route } from 'react-router-dom'
 import Home from './pages/Home.jsx'
 import Join from './pages/Join.jsx'
 import Play from './pages/Play.jsx'
+import Register from './pages/Register.jsx'
 import Spectator from './pages/Spectator.jsx'
 import AuthCallback from './pages/AuthCallback.jsx'
 import Dashboard from './pages/organizer/Dashboard.jsx'
@@ -20,6 +21,7 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/join" element={<Join />} />
         <Route path="/play/:accessCode" element={<Play />} />
+        <Route path="/register/:eventCode" element={<Register />} />
         <Route path="/spectator" element={<Spectator />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/organizer" element={<Dashboard />} />

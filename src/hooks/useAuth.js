@@ -40,6 +40,8 @@ export function useAuth() {
     if (error) {
       console.error('Sign-out error:', error.message)
     }
+    // Ensure user state is cleared immediately
+    setUser(null)
   }
 
   return { user, loading, signInWithGoogle, signOut }
