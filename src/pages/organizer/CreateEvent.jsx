@@ -413,11 +413,16 @@ export default function CreateEvent() {
   }
 
   const [copyToast, setCopyToast] = useState('')
+  const [copiedKey, setCopiedKey] = useState('')
 
-  function copyWithToast(text, label) {
+  function copyWithToast(text, label, key) {
     navigator.clipboard?.writeText(text)
     setCopyToast(label || 'Copied!')
     setTimeout(() => setCopyToast(''), 2000)
+    if (key) {
+      setCopiedKey(key)
+      setTimeout(() => setCopiedKey(''), 2000)
+    }
   }
 
   function copyAllCodes() {
@@ -425,7 +430,7 @@ export default function CreateEvent() {
       .map((p) => `${p.name}: ${p.accessCode}`)
       .join('\n')
     const text = `Event: ${eventName}\nEvent Code: ${eventCode}\n\nParticipant Access Codes:\n${lines}`
-    copyWithToast(text, 'All codes copied!')
+    copyWithToast(text, 'All codes copied!', 'allCodes')
   }
 
   const totalMissionsNeeded = participantCount * missionCount
@@ -473,6 +478,7 @@ export default function CreateEvent() {
         {step === 1 && (
           <div className="space-y-5">
             <h2 className="text-2xl font-bold text-stone-800">Event Basics</h2>
+            <p className="text-stone-400 text-sm">Tell us about your event. The start and end times control when missions go live and when the event wraps up.</p>
 
             <div>
               <label className="block text-sm font-medium text-stone-600 mb-1">
@@ -581,42 +587,54 @@ export default function CreateEvent() {
         {step === 2 && (
           <div className="space-y-5">
             <h2 className="text-2xl font-bold text-stone-800">Participants</h2>
+            <p className="text-stone-400 text-sm">You can add people now, share an invite link later, or both. Don't stress about getting everyone — you can always add more after the event is created.</p>
 
-            <div>
-              <label className="block text-sm font-medium text-stone-600 mb-1">
-                Number of Participants
-              </label>
-              <input
-                type="number"
-                value={participantCount}
-                onChange={(e) =>
-                  setParticipantCount(
-                    Math.max(1, parseInt(e.target.value) || 1)
-                  )
-                }
-                min={1}
-                max={200}
-                className="w-full px-4 py-3 rounded-xl border border-stone-300 bg-white text-stone-800 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-transparent"
-              />
+            {/* Invite link info */}
+            <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4">
+              <h4 className="text-emerald-800 text-sm font-semibold mb-1">Option A: Share an invite link</h4>
+              <p className="text-emerald-700 text-xs">After creating the event, you'll get a shareable link and QR code. Send it out and guests register themselves — no names needed upfront.</p>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-stone-600 mb-1">
-                Participant Names (optional)
-              </label>
-              <p className="text-stone-400 text-xs mb-2">
-                One name per line. Unnamed slots will be available for walk-up
-                participants.
-              </p>
-              <textarea
-                ref={textareaRef}
-                value={participantNames}
-                onChange={(e) => setParticipantNames(e.target.value)}
-                placeholder={"Jake\nSarah\nMike\nTaylor"}
-                rows={4}
-                style={{ minHeight: '120px', maxHeight: '400px', overflow: 'auto' }}
-                className="w-full px-4 py-3 rounded-xl border border-stone-300 bg-white text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-transparent resize-none"
-              />
+            {/* Pre-register names */}
+            <div className="rounded-xl bg-white border border-stone-200 p-4 space-y-3">
+              <div>
+                <h4 className="text-stone-700 text-sm font-semibold mb-1">Option B: Add names now</h4>
+                <p className="text-stone-400 text-xs mb-2">If you already know who's coming, add their names and you'll get individual access codes to hand out.</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-stone-600 mb-1">
+                  Expected headcount
+                </label>
+                <input
+                  type="number"
+                  value={participantCount}
+                  onChange={(e) =>
+                    setParticipantCount(
+                      Math.max(1, parseInt(e.target.value) || 1)
+                    )
+                  }
+                  min={1}
+                  max={200}
+                  className="w-full px-4 py-3 rounded-xl border border-stone-300 bg-white text-stone-800 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-stone-600 mb-1">
+                  Names (optional)
+                </label>
+                <textarea
+                  ref={textareaRef}
+                  value={participantNames}
+                  onChange={(e) => setParticipantNames(e.target.value)}
+                  placeholder={"Jake\nSarah\nMike\nTaylor"}
+                  rows={4}
+                  style={{ minHeight: '120px', maxHeight: '400px', overflow: 'auto' }}
+                  className="w-full px-4 py-3 rounded-xl border border-stone-300 bg-white text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-transparent resize-none"
+                />
+                <p className="text-stone-400 text-xs mt-1">One per line. Any unnamed slots can be filled via invite link later.</p>
+              </div>
             </div>
 
             <label className="flex items-center gap-3 cursor-pointer">
@@ -637,6 +655,7 @@ export default function CreateEvent() {
         {step === 3 && (
           <div className="space-y-5">
             <h2 className="text-2xl font-bold text-stone-800">Missions</h2>
+            <p className="text-stone-400 text-sm">Choose how many missions each guest gets and how they unlock. Missions are pulled from our library based on the categories you pick.</p>
 
             {isEditMode && editEventStatus === 'active' && (
               <p className="text-amber-600 text-sm bg-amber-50 border border-amber-200 rounded-xl p-3">
@@ -667,9 +686,10 @@ export default function CreateEvent() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-stone-600 mb-2">
+              <label className="block text-sm font-medium text-stone-600 mb-1">
                 Unlock Type
               </label>
+              <p className="text-stone-400 text-xs mb-2">All at once = guests see every mission from the start. Timed = missions reveal throughout the event to keep things exciting.</p>
               <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
@@ -842,7 +862,7 @@ export default function CreateEvent() {
                   onClick={copyAllCodes}
                   className="text-emerald-700 text-sm font-medium hover:underline"
                 >
-                  Copy All
+                  {copiedKey === 'allCodes' ? '\u2713 Copied!' : 'Copy All'}
                 </button>
               </div>
               <div className="max-h-60 overflow-y-auto space-y-1">
@@ -866,11 +886,11 @@ export default function CreateEvent() {
 
         {/* Launched state */}
         {launched && (
-          <div className="space-y-5 text-center">
-            <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-6 space-y-3">
+          <div className="space-y-5">
+            <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-6 space-y-3 text-center">
               <p className="text-4xl">🎉</p>
               <h2 className="text-2xl font-bold text-emerald-700">
-                Event Launched!
+                Event Created!
               </h2>
               <p className="text-emerald-600">
                 {eventName} is ready to go.
@@ -880,11 +900,34 @@ export default function CreateEvent() {
               </p>
             </div>
 
+            {/* Next steps checklist */}
+            <div className="rounded-xl bg-white border border-stone-200 p-5">
+              <h3 className="font-semibold text-stone-800 mb-3">Next steps</h3>
+              <div className="space-y-3 text-sm">
+                <div className="flex items-start gap-3">
+                  <span className="text-emerald-600 mt-0.5">&#9745;</span>
+                  <p className="text-stone-600"><span className="font-medium text-stone-800">Share the invite link</span> — from the event page, copy the link or QR code and send it to your guests</p>
+                </div>
+                <div className="flex items-start gap-3">
+                  <span className="text-stone-300 mt-0.5">&#9744;</span>
+                  <p className="text-stone-600"><span className="font-medium text-stone-800">Or hand out access codes</span> — if you added names, each person has a unique code on the event page</p>
+                </div>
+                <div className="flex items-start gap-3">
+                  <span className="text-stone-300 mt-0.5">&#9744;</span>
+                  <p className="text-stone-600"><span className="font-medium text-stone-800">Check the mission assignments</span> — use the Missions tab on the event page to preview what each guest got</p>
+                </div>
+                <div className="flex items-start gap-3">
+                  <span className="text-stone-300 mt-0.5">&#9744;</span>
+                  <p className="text-stone-600"><span className="font-medium text-stone-800">Watch it unfold</span> — on event day, open the event page to see the leaderboard and feed update in real time</p>
+                </div>
+              </div>
+            </div>
+
             <button
               onClick={() => navigate(`/organizer/event/${createdEventId}`)}
               className="w-full py-3 rounded-xl bg-emerald-700 text-white font-semibold text-lg hover:bg-emerald-800 active:bg-emerald-900 transition-colors"
             >
-              View Event
+              Go to Event Page
             </button>
 
             <button

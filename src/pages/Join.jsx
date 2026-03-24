@@ -116,7 +116,7 @@ export default function Join() {
         </form>
 
         <p className="text-stone-400 text-xs text-center">
-          Both codes are provided by your event organizer.
+          Your host will share these codes with you. Ask them if you don't have them!
         </p>
       </div>
     </div>

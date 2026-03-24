@@ -11,11 +11,16 @@ export default function Register() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(null)
   const [copyToast, setCopyToast] = useState('')
+  const [copiedKey, setCopiedKey] = useState('')
 
-  function copyWithToast(text, label) {
+  function copyWithToast(text, label, key) {
     navigator.clipboard?.writeText(text)
     setCopyToast(label || 'Copied!')
     setTimeout(() => setCopyToast(''), 2000)
+    if (key) {
+      setCopiedKey(key)
+      setTimeout(() => setCopiedKey(''), 2000)
+    }
   }
 
   // Form fields
@@ -190,10 +195,10 @@ export default function Register() {
           </button>
 
           <button
-            onClick={() => copyWithToast(success.accessCode, 'Access code copied!')}
+            onClick={() => copyWithToast(success.accessCode, 'Access code copied!', 'accessCode')}
             className="w-full py-3 rounded-xl border border-stone-300 text-stone-600 font-medium hover:bg-stone-200 transition-colors"
           >
-            Copy Access Code
+            {copiedKey === 'accessCode' ? '\u2713 Copied!' : 'Copy Access Code'}
           </button>
         </div>
 

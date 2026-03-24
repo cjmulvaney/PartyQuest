@@ -8,6 +8,9 @@ export default function Dashboard() {
   const { user, loading: authLoading, signInWithGoogle, signOut } = useAuth()
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
+  const [showGuide, setShowGuide] = useState(
+    () => !localStorage.getItem('pq_organizer_guide_dismissed')
+  )
 
   useEffect(() => {
     if (authLoading) return
@@ -95,6 +98,28 @@ export default function Dashboard() {
         >
           + New Event
         </button>
+
+        {/* First-time organizer guide */}
+        {showGuide && (
+          <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-5 mb-8 relative">
+            <button
+              onClick={() => {
+                setShowGuide(false)
+                localStorage.setItem('pq_organizer_guide_dismissed', '1')
+              }}
+              className="absolute top-3 right-3 text-emerald-400 hover:text-emerald-600 text-lg leading-none"
+            >
+              &times;
+            </button>
+            <h3 className="font-semibold text-emerald-800 mb-3">Welcome! Here's how Party Quest works:</h3>
+            <div className="space-y-2 text-sm text-emerald-700">
+              <p><span className="font-bold">1.</span> Create an event — pick a name, set the date, and choose how many missions each guest gets</p>
+              <p><span className="font-bold">2.</span> Invite your guests — share the invite link or hand out access codes</p>
+              <p><span className="font-bold">3.</span> Guests get secret missions — fun challenges to complete during your event</p>
+              <p><span className="font-bold">4.</span> Watch it unfold — track completions and see the leaderboard update in real time</p>
+            </div>
+          </div>
+        )}
 
         {loading ? (
           <p className="text-stone-500 text-center py-8">Loading events...</p>

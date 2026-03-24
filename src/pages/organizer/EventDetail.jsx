@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase.js'
 import { useAuth } from '../../hooks/useAuth.js'
@@ -23,7 +23,11 @@ export default function EventDetail() {
   const [timeRemaining, setTimeRemaining] = useState('')
   const [showLeaderboard, setShowLeaderboard] = useState(false)
   const [activeTab, setActiveTab] = useState('participants')
-  const [reassigning, setReassigning] = useState(null)
+  const [selectTarget, setSelectTarget] = useState(null)
+  const [localAssignments, setLocalAssignments] = useState(null)
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [missionPool, setMissionPool] = useState([])
   const [organizerAccessCode, setOrganizerAccessCode] = useState(null)
   const [showQR, setShowQR] = useState(false)
   // Add participant inline
@@ -31,11 +35,16 @@ export default function EventDetail() {
   const [newParticipantName, setNewParticipantName] = useState('')
   // Copy toast
   const [copyToast, setCopyToast] = useState('')
+  const [copiedKey, setCopiedKey] = useState('')
 
-  function copyWithToast(text, label) {
+  function copyWithToast(text, label, key) {
     navigator.clipboard?.writeText(text)
     setCopyToast(label || 'Copied!')
     setTimeout(() => setCopyToast(''), 2000)
+    if (key) {
+      setCopiedKey(key)
+      setTimeout(() => setCopiedKey(''), 2000)
+    }
   }
 
   const loadData = useCallback(async () => {
@@ -156,6 +165,27 @@ export default function EventDetail() {
     setMissionAssignments(assignments)
   }, [id])
 
+  // Load all missions in the pool (for sidebar)
+  const loadMissionPool = useCallback(async () => {
+    let query = supabase.from('missions').select('id, text').eq('active', true)
+    if (config?.tag_filters?.length > 0) {
+      query = query.in('category_id', config.tag_filters)
+    }
+    const { data } = await query
+    setMissionPool(data || [])
+  }, [config])
+
+  // Sync local assignments from DB when not editing
+  useEffect(() => {
+    if (missionAssignments.length > 0 && !hasUnsavedChanges) {
+      setLocalAssignments(missionAssignments.map(p => ({
+        ...p,
+        missions: p.missions.map(pm => ({ ...pm, _originalMissionId: pm.mission_id }))
+      })))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [missionAssignments])
+
   useEffect(() => {
     if (!authLoading && !user) {
       signInWithGoogle()
@@ -166,12 +196,13 @@ export default function EventDetail() {
     }
   }, [user, authLoading, loadData])
 
-  // Load mission assignments when tab switches
+  // Load mission assignments and pool when tab switches
   useEffect(() => {
     if (activeTab === 'missions' && user) {
       loadMissionAssignments()
+      loadMissionPool()
     }
-  }, [activeTab, user, loadMissionAssignments])
+  }, [activeTab, user, loadMissionAssignments, loadMissionPool])
 
   // Refresh every 30 seconds for live events
   useEffect(() => {
@@ -356,61 +387,103 @@ export default function EventDetail() {
     await loadData()
   }
 
-  async function handleReassignMission(participantMissionId, participantId) {
-    setReassigning(participantMissionId)
-    setError('')
-
-    try {
-      // Get currently assigned mission IDs for this participant
-      const { data: currentMissions } = await supabase
-        .from('participant_missions')
-        .select('mission_id')
-        .eq('participant_id', participantId)
-
-      const usedIds = currentMissions?.map((m) => m.mission_id) || []
-
-      // Get a new mission from the pool
-      let query = supabase
-        .from('missions')
-        .select('id')
-        .eq('active', true)
-
-      if (config?.tag_filters?.length > 0) {
-        query = query.in('category_id', config.tag_filters)
-      }
-
-      const { data: available } = await query
-
-      // Filter out already-assigned missions
-      const unassigned = available?.filter((m) => !usedIds.includes(m.id)) || []
-
-      if (unassigned.length === 0) {
-        if (!confirm('No unassigned missions available. A repeat mission will be assigned. Continue?')) {
-          setReassigning(null)
-          return
-        }
-        // Use any random mission from the pool
-        if (available && available.length > 0) {
-          const randomMission = available[Math.floor(Math.random() * available.length)]
-          await supabase
-            .from('participant_missions')
-            .update({ mission_id: randomMission.id, completed: false, notes: null, photo_url: null, completed_at: null })
-            .eq('id', participantMissionId)
-        }
-      } else {
-        const randomMission = unassigned[Math.floor(Math.random() * unassigned.length)]
-        await supabase
-          .from('participant_missions')
-          .update({ mission_id: randomMission.id, completed: false, notes: null, photo_url: null, completed_at: null })
-          .eq('id', participantMissionId)
-      }
-
-      await loadMissionAssignments()
-    } catch (err) {
-      setError(err.message || 'Failed to reassign mission.')
+  function handleSelectForSwap(participantIdx, missionIdx) {
+    if (selectTarget?.participantIdx === participantIdx && selectTarget?.missionIdx === missionIdx) {
+      setSelectTarget(null)
+      return
     }
+    setSelectTarget({ participantIdx, missionIdx })
+  }
 
-    setReassigning(null)
+  function ensureLocalAssignments() {
+    return localAssignments || missionAssignments.map(p => ({
+      ...p,
+      missions: p.missions.map(pm => ({ ...pm, _originalMissionId: pm.mission_id }))
+    }))
+  }
+
+  function handleUnassign(participantIdx, missionIdx) {
+    setSelectTarget(null)
+    const base = ensureLocalAssignments()
+    const next = base.map((p, pIdx) => {
+      if (pIdx !== participantIdx) return p
+      return {
+        ...p,
+        missions: p.missions.map((pm, mIdx) => {
+          if (mIdx !== missionIdx) return pm
+          return { ...pm, mission_id: null, missions: null }
+        })
+      }
+    })
+    setLocalAssignments(next)
+    setHasUnsavedChanges(true)
+  }
+
+  function handlePoolMissionClick(mission) {
+    if (!selectTarget) return
+    const { participantIdx, missionIdx } = selectTarget
+    const base = ensureLocalAssignments()
+    const next = base.map((p, pIdx) => {
+      if (pIdx !== participantIdx) return p
+      return {
+        ...p,
+        missions: p.missions.map((pm, mIdx) => {
+          if (mIdx !== missionIdx) return pm
+          return { ...pm, mission_id: mission.id, missions: { text: mission.text } }
+        })
+      }
+    })
+    setLocalAssignments(next)
+    setSelectTarget(null)
+    setHasUnsavedChanges(true)
+  }
+
+  function handleCancelEdits() {
+    setLocalAssignments(missionAssignments.map(p => ({
+      ...p,
+      missions: p.missions.map(pm => ({ ...pm, _originalMissionId: pm.mission_id }))
+    })))
+    setHasUnsavedChanges(false)
+    setSelectTarget(null)
+  }
+
+  async function handleSaveAssignments() {
+    // Validate no empty slots
+    const empty = localAssignments?.reduce((count, p) =>
+      count + p.missions.filter(pm => !pm?.mission_id).length, 0
+    ) ?? 0
+    if (empty > 0 || !hasUnsavedChanges) return
+
+    setSaving(true)
+    setError('')
+    try {
+      const promises = []
+      localAssignments.forEach(p => {
+        p.missions.forEach(pm => {
+          if (pm.mission_id && pm.mission_id !== pm._originalMissionId) {
+            promises.push(
+              supabase.from('participant_missions')
+                .update({
+                  mission_id: pm.mission_id,
+                  completed: false,
+                  notes: null,
+                  photo_url: null,
+                  completed_at: null
+                })
+                .eq('id', pm.id)
+            )
+          }
+        })
+      })
+
+      await Promise.all(promises)
+      await loadMissionAssignments()
+      setHasUnsavedChanges(false)
+      setSelectTarget(null)
+    } catch (err) {
+      setError(err.message || 'Failed to save assignments.')
+    }
+    setSaving(false)
   }
 
   async function assignMissionsToParticipant(participant, eventConfig) {
@@ -495,9 +568,33 @@ export default function EventDetail() {
 
   const inviteLink = `${window.location.origin}/register/${event.event_code}`
 
+  // Compute mission pool with assignment counts from local state
+  const poolWithCounts = useMemo(() => {
+    if (!missionPool.length) return []
+    const counts = {}
+    const working = localAssignments || missionAssignments
+    working.forEach(p => {
+      p.missions?.forEach(pm => {
+        if (pm?.mission_id) {
+          counts[pm.mission_id] = (counts[pm.mission_id] || 0) + 1
+        }
+      })
+    })
+    return missionPool.map(m => ({
+      ...m,
+      assignCount: counts[m.id] || 0
+    })).sort((a, b) => a.text.localeCompare(b.text))
+  }, [missionPool, localAssignments, missionAssignments])
+
+  const emptySlots = localAssignments?.reduce((count, p) =>
+    count + p.missions.filter(pm => !pm?.mission_id).length, 0
+  ) ?? 0
+
+  const canSave = hasUnsavedChanges && emptySlots === 0
+
   return (
     <div className="min-h-screen bg-stone-100">
-      <div className="max-w-2xl mx-auto px-4 py-6">
+      <div className={`${activeTab === 'missions' ? 'max-w-5xl' : 'max-w-2xl'} mx-auto px-4 py-6 transition-all`}>
         {/* Header */}
         <button
           onClick={() => navigate('/organizer')}
@@ -577,10 +674,10 @@ export default function EventDetail() {
               </p>
             </div>
             <button
-              onClick={() => copyWithToast(event.event_code, 'Event code copied!')}
+              onClick={() => copyWithToast(event.event_code, 'Event code copied!', 'eventCode')}
               className="text-emerald-700 text-sm font-medium hover:underline"
             >
-              Copy
+              {copiedKey === 'eventCode' ? '\u2713 Copied!' : 'Copy'}
             </button>
           </div>
 
@@ -593,10 +690,10 @@ export default function EventDetail() {
                   {inviteLink}
                 </p>
                 <button
-                  onClick={() => copyWithToast(inviteLink, 'Invite link copied!')}
+                  onClick={() => copyWithToast(inviteLink, 'Invite link copied!', 'inviteLink')}
                   className="text-emerald-700 text-xs font-medium hover:underline shrink-0"
                 >
-                  Copy Link
+                  {copiedKey === 'inviteLink' ? '\u2713 Copied!' : 'Copy Link'}
                 </button>
                 <button
                   onClick={() => setShowQR(!showQR)}
@@ -812,57 +909,188 @@ export default function EventDetail() {
                   </button>
                 </div>
                 <p className="text-stone-400 text-xs mt-2">
-                  Or share the <button onClick={() => { setActiveTab('participants'); copyWithToast(inviteLink, 'Invite link copied!') }} className="text-emerald-700 font-medium hover:underline">invite link</button> and let participants register themselves.
+                  Or share the <button onClick={() => { setActiveTab('participants'); copyWithToast(inviteLink, 'Invite link copied!', 'inviteLinkInline') }} className="text-emerald-700 font-medium hover:underline">{copiedKey === 'inviteLinkInline' ? '\u2713 Copied!' : 'invite link'}</button> and let participants register themselves.
                 </p>
               </div>
             )}
           </div>
         )}
 
-        {/* Missions tab — Assignment View */}
+        {/* Missions tab — Assignment View with Pool Sidebar */}
         {activeTab === 'missions' && (
-          <div className="space-y-4 mb-6">
-            {(!isEnded && !isLive && missionAssignments.length === 0) && (
-              <p className="text-stone-400 text-sm text-center py-6">
-                Mission assignments will appear here after the event is created.
-              </p>
-            )}
-            {missionAssignments.map((participant) => (
-              <div key={participant.id} className="rounded-xl bg-white border border-stone-200 overflow-hidden">
-                <div className="px-4 py-3 border-b border-stone-100">
-                  <h4 className="font-semibold text-stone-800 text-sm">{participant.name}</h4>
-                </div>
-                <div className="divide-y divide-stone-50">
-                  {participant.missions.map((pm) => (
-                    <div key={pm.id} className="px-4 py-2 flex items-center justify-between">
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-sm truncate ${pm.completed ? 'text-emerald-600 line-through' : 'text-stone-700'}`}>
-                          {pm.missions?.text || 'Unknown mission'}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 ml-2">
-                        {pm.completed && (
-                          <span className="text-emerald-500 text-xs font-medium">Done</span>
-                        )}
-                        {/* Reassign button: upcoming always, active only if not completed */}
-                        {(isUpcoming || (isLive && !pm.completed)) && (
-                          <button
-                            onClick={() => handleReassignMission(pm.id, participant.id)}
-                            disabled={reassigning === pm.id}
-                            className="text-amber-600 hover:text-amber-700 text-xs font-medium disabled:opacity-50"
-                          >
-                            {reassigning === pm.id ? '...' : 'Reassign'}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                  {participant.missions.length === 0 && (
-                    <p className="text-stone-400 text-xs px-4 py-3">No missions assigned</p>
+          <div className="mb-6">
+            {/* Save bar */}
+            {hasUnsavedChanges && !isEnded && (
+              <div className="mb-4 p-3 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-between">
+                <div>
+                  <span className="text-amber-800 text-sm font-medium">Unsaved changes</span>
+                  {emptySlots > 0 && (
+                    <span className="text-amber-600 text-xs ml-2">
+                      ({emptySlots} empty {emptySlots === 1 ? 'slot' : 'slots'} — fill before saving)
+                    </span>
                   )}
                 </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleCancelEdits}
+                    className="px-3 py-1.5 rounded-lg text-stone-600 text-sm font-medium hover:bg-stone-100 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSaveAssignments}
+                    disabled={!canSave || saving}
+                    className="px-4 py-1.5 rounded-lg bg-emerald-700 text-white text-sm font-medium hover:bg-emerald-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {saving ? 'Saving...' : 'Save'}
+                  </button>
+                </div>
               </div>
-            ))}
+            )}
+
+            {/* Select mode banner */}
+            {selectTarget && (
+              <div className="mb-4 p-3 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-between">
+                <span className="text-blue-800 text-sm font-medium">
+                  Select a mission from the pool to assign
+                </span>
+                <button
+                  onClick={() => setSelectTarget(null)}
+                  className="text-blue-600 text-sm font-medium hover:underline"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+
+            <div className="flex flex-col lg:flex-row gap-4">
+              {/* Participant assignments */}
+              <div className="flex-1 min-w-0 space-y-4">
+                {(!isEnded && !isLive && (localAssignments || missionAssignments).length === 0) && (
+                  <p className="text-stone-400 text-sm text-center py-6">
+                    Mission assignments will appear here after the event is created.
+                  </p>
+                )}
+                {(localAssignments || missionAssignments).map((participant, pIdx) => (
+                  <div key={participant.id} className="rounded-xl bg-white border border-stone-200 overflow-hidden">
+                    <div className="px-4 py-3 border-b border-stone-100">
+                      <h4 className="font-semibold text-stone-800 text-sm">{participant.name}</h4>
+                    </div>
+                    <div className="divide-y divide-stone-50">
+                      {participant.missions.map((pm, mIdx) => (
+                        <div
+                          key={pm?.id || mIdx}
+                          className={`px-4 py-2 flex items-center justify-between ${
+                            selectTarget?.participantIdx === pIdx && selectTarget?.missionIdx === mIdx
+                              ? 'bg-blue-50 border-l-2 border-blue-400'
+                              : ''
+                          }`}
+                        >
+                          {pm?.mission_id ? (
+                            <>
+                              <div className="flex-1 min-w-0">
+                                <p className={`text-sm truncate ${pm.completed ? 'text-emerald-600 line-through' : 'text-stone-700'}`}>
+                                  {pm.missions?.text || 'Unknown mission'}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2 ml-2">
+                                {pm.completed && (
+                                  <span className="text-emerald-500 text-xs font-medium">Done</span>
+                                )}
+                                {(isUpcoming || (isLive && !pm.completed)) && (
+                                  <>
+                                    <button
+                                      onClick={() => handleSelectForSwap(pIdx, mIdx)}
+                                      className={`text-xs font-medium ${
+                                        selectTarget?.participantIdx === pIdx && selectTarget?.missionIdx === mIdx
+                                          ? 'text-blue-700'
+                                          : 'text-blue-600 hover:text-blue-700'
+                                      }`}
+                                    >
+                                      {selectTarget?.participantIdx === pIdx && selectTarget?.missionIdx === mIdx
+                                        ? 'Selecting...'
+                                        : 'Swap'}
+                                    </button>
+                                    <button
+                                      onClick={() => handleUnassign(pIdx, mIdx)}
+                                      className="text-red-500 hover:text-red-600 text-xs font-medium"
+                                    >
+                                      Unassign
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </>
+                          ) : (
+                            <div className="flex-1 flex items-center justify-between">
+                              <span className="text-stone-400 text-sm italic">Empty slot</span>
+                              {(isUpcoming || isLive) && (
+                                <button
+                                  onClick={() => handleSelectForSwap(pIdx, mIdx)}
+                                  className={`text-xs font-medium ${
+                                    selectTarget?.participantIdx === pIdx && selectTarget?.missionIdx === mIdx
+                                      ? 'text-blue-700'
+                                      : 'text-emerald-600 hover:text-emerald-700'
+                                  }`}
+                                >
+                                  {selectTarget?.participantIdx === pIdx && selectTarget?.missionIdx === mIdx
+                                    ? 'Selecting...'
+                                    : 'Assign'}
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      {participant.missions.length === 0 && (
+                        <p className="text-stone-400 text-xs px-4 py-3">No missions assigned</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Mission Pool Sidebar */}
+              <div className="w-full lg:w-80 shrink-0">
+                <div className="lg:sticky lg:top-4 rounded-xl bg-white border border-stone-200 overflow-hidden">
+                  <div className="px-4 py-3 border-b border-stone-100">
+                    <h3 className="font-semibold text-stone-800 text-sm">
+                      Mission Pool ({poolWithCounts.length})
+                    </h3>
+                    <p className="text-stone-400 text-xs mt-0.5">
+                      Number shows how many players have each mission
+                    </p>
+                  </div>
+                  <div className="max-h-[70vh] overflow-y-auto divide-y divide-stone-50">
+                    {poolWithCounts.map((mission) => (
+                      <div
+                        key={mission.id}
+                        onClick={() => selectTarget && handlePoolMissionClick(mission)}
+                        className={`px-4 py-2.5 flex items-start justify-between gap-2 ${
+                          selectTarget
+                            ? 'cursor-pointer hover:bg-emerald-50 transition-colors'
+                            : ''
+                        }`}
+                      >
+                        <p className="text-sm text-stone-700 flex-1">{mission.text}</p>
+                        <span className={`text-xs font-mono font-medium shrink-0 px-1.5 py-0.5 rounded ${
+                          mission.assignCount === 0
+                            ? 'bg-stone-100 text-stone-400'
+                            : 'bg-emerald-100 text-emerald-700'
+                        }`}>
+                          {mission.assignCount}
+                        </span>
+                      </div>
+                    ))}
+                    {poolWithCounts.length === 0 && (
+                      <p className="text-stone-400 text-xs px-4 py-6 text-center">
+                        No missions in pool
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 

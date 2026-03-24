@@ -17,6 +17,9 @@ export default function Play() {
   const [missions, setMissions] = useState([])
   const [selectedMission, setSelectedMission] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [showWelcome, setShowWelcome] = useState(
+    () => !localStorage.getItem('pq_player_welcome_dismissed')
+  )
   const [error, setError] = useState('')
   const [toast, setToast] = useState('')
   const unlockTimersRef = useRef([])
@@ -155,6 +158,28 @@ export default function Play() {
             </button>
           </div>
         </div>
+
+        {/* First-time welcome */}
+        {showWelcome && tab === 'missions' && (
+          <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4 mb-4 relative">
+            <button
+              onClick={() => {
+                setShowWelcome(false)
+                localStorage.setItem('pq_player_welcome_dismissed', '1')
+              }}
+              className="absolute top-2 right-3 text-emerald-400 hover:text-emerald-600 text-lg leading-none"
+            >
+              &times;
+            </button>
+            <h3 className="font-semibold text-emerald-800 text-sm mb-2">Here's how it works:</h3>
+            <div className="space-y-1 text-xs text-emerald-700">
+              <p>Your secret missions are below — nobody else can see them.</p>
+              <p>Tap a mission to mark it complete, add notes, or snap a photo.</p>
+              <p>Check the Leaderboard tab to see how you stack up, and the Feed to see what's happening.</p>
+              <p>Have fun! 🎉</p>
+            </div>
+          </div>
+        )}
 
         {/* Tab content */}
         {tab === 'missions' && (
