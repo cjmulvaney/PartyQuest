@@ -512,6 +512,31 @@ export default function EventDetail() {
     }
   }
 
+  // Compute mission pool with assignment counts from local state
+  // NOTE: Must be above early returns to preserve hook call order
+  const poolWithCounts = useMemo(() => {
+    if (!missionPool.length) return []
+    const counts = {}
+    const working = localAssignments || missionAssignments
+    working.forEach(p => {
+      p.missions?.forEach(pm => {
+        if (pm?.mission_id) {
+          counts[pm.mission_id] = (counts[pm.mission_id] || 0) + 1
+        }
+      })
+    })
+    return missionPool.map(m => ({
+      ...m,
+      assignCount: counts[m.id] || 0
+    })).sort((a, b) => a.text.localeCompare(b.text))
+  }, [missionPool, localAssignments, missionAssignments])
+
+  const emptySlots = localAssignments?.reduce((count, p) =>
+    count + p.missions.filter(pm => !pm?.mission_id).length, 0
+  ) ?? 0
+
+  const canSave = hasUnsavedChanges && emptySlots === 0
+
   if (authLoading || (!user && !authLoading)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-stone-100">
@@ -567,30 +592,6 @@ export default function EventDetail() {
       : '0'
 
   const inviteLink = `${window.location.origin}/register/${event.event_code}`
-
-  // Compute mission pool with assignment counts from local state
-  const poolWithCounts = useMemo(() => {
-    if (!missionPool.length) return []
-    const counts = {}
-    const working = localAssignments || missionAssignments
-    working.forEach(p => {
-      p.missions?.forEach(pm => {
-        if (pm?.mission_id) {
-          counts[pm.mission_id] = (counts[pm.mission_id] || 0) + 1
-        }
-      })
-    })
-    return missionPool.map(m => ({
-      ...m,
-      assignCount: counts[m.id] || 0
-    })).sort((a, b) => a.text.localeCompare(b.text))
-  }, [missionPool, localAssignments, missionAssignments])
-
-  const emptySlots = localAssignments?.reduce((count, p) =>
-    count + p.missions.filter(pm => !pm?.mission_id).length, 0
-  ) ?? 0
-
-  const canSave = hasUnsavedChanges && emptySlots === 0
 
   return (
     <div className="min-h-screen bg-stone-100">
