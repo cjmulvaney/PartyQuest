@@ -62,60 +62,214 @@ export default function Join() {
     navigate(`/play/${participant.access_code}`)
   }
 
+  const isDisabled = loading || eventCode.trim().length < 3 || accessCode.trim().length < 3
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-stone-100 px-4">
-      <div className="max-w-sm w-full space-y-6">
+    <div
+      className="min-h-screen flex items-center justify-center px-4 relative overflow-hidden"
+      style={{ background: 'var(--color-bg)' }}
+    >
+      {/* Subtle decorative gradient */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          top: '-60px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: '400px',
+          height: '400px',
+          borderRadius: '50%',
+          background: 'var(--color-primary-subtle)',
+          opacity: 0.4,
+          filter: 'blur(80px)',
+          pointerEvents: 'none',
+        }}
+      />
+
+      <div className="max-w-sm w-full relative z-10 animate-fade-in" style={{ padding: '24px 0' }}>
+        {/* Back link */}
         <button
           onClick={() => navigate('/')}
-          className="text-stone-400 text-sm hover:text-stone-600 transition-colors"
+          className="pq-btn pq-btn-ghost animate-fade-in"
+          style={{
+            padding: '6px 12px',
+            fontSize: '0.875rem',
+            marginBottom: '24px',
+            color: 'var(--color-text-muted)',
+            gap: '4px',
+          }}
         >
-          &larr; Back
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M19 12H5" />
+            <path d="M12 19l-7-7 7-7" />
+          </svg>
+          Back
         </button>
 
-        <h1 className="text-3xl font-bold text-emerald-700">Join Event</h1>
+        {/* Header */}
+        <div className="mb-8 animate-slide-up stagger-1">
+          <h1
+            style={{
+              fontFamily: 'var(--font-heading)',
+              fontSize: '2rem',
+              fontWeight: 700,
+              color: 'var(--color-text)',
+              margin: 0,
+              letterSpacing: '-0.01em',
+            }}
+          >
+            Join Event
+          </h1>
+          <p
+            className="mt-2"
+            style={{
+              fontSize: '0.9375rem',
+              color: 'var(--color-text-secondary)',
+              margin: '8px 0 0',
+            }}
+          >
+            Enter the codes from your host to get started.
+          </p>
+        </div>
 
-        <form onSubmit={handleJoin} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-stone-600 mb-1">
+        {/* Form */}
+        <form onSubmit={handleJoin} className="space-y-5">
+          {/* Event Code */}
+          <div className="animate-slide-up stagger-2">
+            <label
+              htmlFor="event-code"
+              style={{
+                display: 'block',
+                fontSize: '0.875rem',
+                fontWeight: 600,
+                color: 'var(--color-text)',
+                marginBottom: '6px',
+              }}
+            >
               Event Code
             </label>
             <input
+              id="event-code"
               type="text"
               value={eventCode}
               onChange={(e) => setEventCode(e.target.value.toUpperCase())}
               placeholder="ABC123"
               maxLength={6}
-              className="w-full text-center text-2xl font-mono tracking-widest px-4 py-3 rounded-xl border border-stone-300 bg-white text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-transparent"
+              className="pq-input"
+              style={{
+                textAlign: 'center',
+                fontSize: '1.5rem',
+                fontFamily: 'monospace',
+                letterSpacing: '0.2em',
+                padding: '14px 16px',
+              }}
               autoFocus
+              autoComplete="off"
             />
+            <p
+              className="mt-1"
+              style={{
+                fontSize: '0.8125rem',
+                color: 'var(--color-text-muted)',
+                margin: '4px 0 0',
+              }}
+            >
+              The 6-character code for the event
+            </p>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-stone-600 mb-1">
+          {/* Access Code */}
+          <div className="animate-slide-up stagger-3">
+            <label
+              htmlFor="access-code"
+              style={{
+                display: 'block',
+                fontSize: '0.875rem',
+                fontWeight: 600,
+                color: 'var(--color-text)',
+                marginBottom: '6px',
+              }}
+            >
               Your Access Code
             </label>
             <input
+              id="access-code"
               type="text"
               value={accessCode}
               onChange={(e) => setAccessCode(e.target.value.toUpperCase())}
-              placeholder="Your personal code"
+              placeholder="MYCODE01"
               maxLength={8}
-              className="w-full text-center text-2xl font-mono tracking-widest px-4 py-3 rounded-xl border border-stone-300 bg-white text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-transparent"
+              className="pq-input"
+              style={{
+                textAlign: 'center',
+                fontSize: '1.5rem',
+                fontFamily: 'monospace',
+                letterSpacing: '0.2em',
+                padding: '14px 16px',
+              }}
+              autoComplete="off"
             />
+            <p
+              className="mt-1"
+              style={{
+                fontSize: '0.8125rem',
+                color: 'var(--color-text-muted)',
+                margin: '4px 0 0',
+              }}
+            >
+              Your personal code -- unique to you
+            </p>
           </div>
 
-          {error && <p className="text-red-600 text-sm">{error}</p>}
+          {/* Error message */}
+          {error && (
+            <div
+              className="animate-scale-in"
+              style={{
+                padding: '10px 14px',
+                background: 'var(--color-danger-light)',
+                color: 'var(--color-danger)',
+                borderRadius: 'var(--radius-md)',
+                fontSize: '0.875rem',
+                fontWeight: 500,
+              }}
+            >
+              {error}
+            </div>
+          )}
 
+          {/* Submit button */}
           <button
             type="submit"
-            disabled={loading || eventCode.trim().length < 3 || accessCode.trim().length < 3}
-            className="w-full py-3 rounded-xl bg-emerald-700 text-white font-semibold text-lg hover:bg-emerald-800 active:bg-emerald-900 transition-colors disabled:opacity-50"
+            disabled={isDisabled}
+            className="pq-btn pq-btn-primary animate-slide-up stagger-4"
+            style={{
+              width: '100%',
+              fontSize: '1.0625rem',
+              padding: '14px 24px',
+              borderRadius: 'var(--radius-xl)',
+            }}
           >
-            {loading ? 'Joining...' : 'Join Event'}
+            {loading ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="pq-spinner" style={{ width: '18px', height: '18px', borderWidth: '2px' }} />
+                Joining...
+              </span>
+            ) : (
+              'Join Event'
+            )}
           </button>
         </form>
 
-        <p className="text-stone-400 text-xs text-center">
+        {/* Footer help text */}
+        <p
+          className="text-center mt-6 animate-fade-in stagger-5"
+          style={{
+            fontSize: '0.8125rem',
+            color: 'var(--color-text-muted)',
+          }}
+        >
           Your host will share these codes with you. Ask them if you don't have them!
         </p>
       </div>

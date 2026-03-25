@@ -265,27 +265,41 @@ export default function MissionsPage() {
     return true
   })
 
-  if (loading) return <p className="text-stone-500">Loading missions...</p>
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <span className="pq-spinner" />
+        <span className="ml-3" style={{ color: 'var(--color-text-muted)', fontFamily: 'var(--font-body)' }}>
+          Loading missions...
+        </span>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-stone-800">Mission Library</h2>
+        <h2
+          className="text-2xl font-bold"
+          style={{ color: 'var(--color-text)', fontFamily: 'var(--font-heading)' }}
+        >
+          Mission Library
+        </h2>
         <div className="flex gap-2">
           <button
             onClick={() => { setShowAddCategory(!showAddCategory); setShowAdd(false) }}
-            className="px-4 py-2 rounded-lg border border-stone-300 text-stone-600 text-sm font-medium hover:bg-stone-50"
+            className="pq-btn pq-btn-secondary"
           >
             + Category
           </button>
           <button
             onClick={() => { setShowAdd(!showAdd); setShowAddCategory(false) }}
-            className="px-4 py-2 rounded-lg bg-emerald-700 text-white text-sm font-medium hover:bg-emerald-800"
+            className="pq-btn pq-btn-primary"
           >
             + Mission
           </button>
-          <label className="px-4 py-2 rounded-lg border border-stone-300 text-stone-600 text-sm font-medium hover:bg-stone-50 cursor-pointer">
+          <label className="pq-btn pq-btn-secondary" style={{ cursor: 'pointer' }}>
             Upload CSV
             <input
               ref={fileRef}
@@ -300,11 +314,19 @@ export default function MissionsPage() {
 
       {/* CSV status */}
       {csvStatus && (
-        <div className="rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-700">
-          {csvStatus}
+        <div
+          className="pq-card flex items-center justify-between"
+          style={{
+            backgroundColor: 'var(--color-primary-subtle)',
+            borderColor: 'var(--color-primary-light)',
+            color: 'var(--color-primary)',
+          }}
+        >
+          <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem' }}>{csvStatus}</span>
           <button
             onClick={() => setCsvStatus('')}
-            className="ml-2 text-blue-500 hover:text-blue-700"
+            className="pq-btn pq-btn-ghost"
+            style={{ color: 'var(--color-primary)', padding: '0.25rem 0.5rem', fontSize: '1.25rem', lineHeight: 1 }}
           >
             &times;
           </button>
@@ -313,14 +335,19 @@ export default function MissionsPage() {
 
       {/* Add category form */}
       {showAddCategory && (
-        <div className="rounded-xl bg-white border border-stone-200 p-4 space-y-3">
-          <h3 className="text-sm font-semibold text-stone-700">New Category</h3>
+        <div className="pq-card space-y-3">
+          <h3
+            className="text-sm font-semibold"
+            style={{ color: 'var(--color-text-secondary)', fontFamily: 'var(--font-heading)' }}
+          >
+            New Category
+          </h3>
           <input
             type="text"
             value={newCatName}
             onChange={(e) => setNewCatName(e.target.value)}
             placeholder="Category name"
-            className="w-full px-3 py-2 rounded-lg border border-stone-300 text-sm text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+            className="pq-input w-full"
             autoFocus
           />
           <input
@@ -328,19 +355,13 @@ export default function MissionsPage() {
             value={newCatDesc}
             onChange={(e) => setNewCatDesc(e.target.value)}
             placeholder="Description (optional)"
-            className="w-full px-3 py-2 rounded-lg border border-stone-300 text-sm text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+            className="pq-input w-full"
           />
           <div className="flex gap-2">
-            <button
-              onClick={addCategory}
-              className="px-4 py-2 rounded-lg bg-emerald-700 text-white text-sm font-medium hover:bg-emerald-800"
-            >
+            <button onClick={addCategory} className="pq-btn pq-btn-primary">
               Create
             </button>
-            <button
-              onClick={() => setShowAddCategory(false)}
-              className="px-4 py-2 rounded-lg text-stone-500 text-sm hover:bg-stone-100"
-            >
+            <button onClick={() => setShowAddCategory(false)} className="pq-btn pq-btn-ghost">
               Cancel
             </button>
           </div>
@@ -349,20 +370,27 @@ export default function MissionsPage() {
 
       {/* Add mission form */}
       {showAdd && (
-        <div className="rounded-xl bg-white border border-stone-200 p-4 space-y-3">
+        <div className="pq-card space-y-3">
+          <h3
+            className="text-sm font-semibold"
+            style={{ color: 'var(--color-text-secondary)', fontFamily: 'var(--font-heading)' }}
+          >
+            New Mission
+          </h3>
           <textarea
             value={newText}
             onChange={(e) => setNewText(e.target.value)}
             placeholder="Mission text..."
             rows={2}
-            className="w-full px-3 py-2 rounded-lg border border-stone-300 text-sm text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+            className="pq-input w-full"
+            style={{ resize: 'vertical' }}
             autoFocus
           />
           <div className="flex gap-3">
             <select
               value={newCategory}
               onChange={(e) => setNewCategory(e.target.value)}
-              className="flex-1 px-3 py-2 rounded-lg border border-stone-300 text-sm text-stone-800"
+              className="pq-input flex-1"
             >
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -375,7 +403,7 @@ export default function MissionsPage() {
               value={newTags}
               onChange={(e) => setNewTags(e.target.value)}
               placeholder="Tags (comma-separated)"
-              className="flex-1 px-3 py-2 rounded-lg border border-stone-300 text-sm text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+              className="pq-input flex-1"
             />
           </div>
           <input
@@ -383,19 +411,13 @@ export default function MissionsPage() {
             value={newCreatorName}
             onChange={(e) => setNewCreatorName(e.target.value)}
             placeholder="Who's creating this mission? (optional)"
-            className="w-full px-3 py-2 rounded-lg border border-stone-300 text-sm text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+            className="pq-input w-full"
           />
           <div className="flex gap-2">
-            <button
-              onClick={addMission}
-              className="px-4 py-2 rounded-lg bg-emerald-700 text-white text-sm font-medium hover:bg-emerald-800"
-            >
+            <button onClick={addMission} className="pq-btn pq-btn-primary">
               Add
             </button>
-            <button
-              onClick={() => setShowAdd(false)}
-              className="px-4 py-2 rounded-lg text-stone-500 text-sm hover:bg-stone-100"
-            >
+            <button onClick={() => setShowAdd(false)} className="pq-btn pq-btn-ghost">
               Cancel
             </button>
           </div>
@@ -403,9 +425,14 @@ export default function MissionsPage() {
       )}
 
       {/* Category toggles */}
-      <div className="space-y-2">
+      <div className="pq-card space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-stone-600">Categories</h3>
+          <h3
+            className="text-sm font-semibold"
+            style={{ color: 'var(--color-text-secondary)', fontFamily: 'var(--font-heading)' }}
+          >
+            Categories
+          </h3>
           <button
             onClick={() => {
               if (selectedCategories.size === categories.length) {
@@ -414,7 +441,8 @@ export default function MissionsPage() {
                 setSelectedCategories(new Set(categories.map((c) => c.id)))
               }
             }}
-            className="text-xs text-emerald-700 hover:underline"
+            className="pq-btn pq-btn-ghost"
+            style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem', color: 'var(--color-primary)' }}
           >
             {selectedCategories.size === categories.length ? 'Deselect All' : 'Select All'}
           </button>
@@ -427,11 +455,16 @@ export default function MissionsPage() {
               <button
                 key={cat.id}
                 onClick={() => toggleCategory(cat.id)}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  isOn
-                    ? 'bg-emerald-700 text-white'
-                    : 'bg-white border border-stone-300 text-stone-400'
-                }`}
+                className={isOn ? 'pq-badge pq-badge-primary' : 'pq-badge pq-badge-muted'}
+                style={{
+                  cursor: 'pointer',
+                  border: 'none',
+                  fontSize: '0.8125rem',
+                  fontFamily: 'var(--font-body)',
+                  padding: '0.375rem 0.75rem',
+                  transition: 'var(--transition-fast)',
+                  opacity: isOn ? 1 : 0.6,
+                }}
               >
                 {cat.name} ({count})
               </button>
@@ -442,13 +475,19 @@ export default function MissionsPage() {
 
       {/* Tag toggles */}
       {allTags.length > 0 && (
-        <div className="space-y-2">
+        <div className="pq-card space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-stone-600">Tags</h3>
+            <h3
+              className="text-sm font-semibold"
+              style={{ color: 'var(--color-text-secondary)', fontFamily: 'var(--font-heading)' }}
+            >
+              Tags
+            </h3>
             {selectedTags.size > 0 && (
               <button
                 onClick={() => setSelectedTags(new Set())}
-                className="text-xs text-emerald-700 hover:underline"
+                className="pq-btn pq-btn-ghost"
+                style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem', color: 'var(--color-primary)' }}
               >
                 Clear
               </button>
@@ -461,11 +500,14 @@ export default function MissionsPage() {
                 <button
                   key={tag}
                   onClick={() => toggleTag(tag)}
-                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
-                    isOn
-                      ? 'bg-emerald-100 text-emerald-700 border border-emerald-300'
-                      : 'bg-stone-100 text-stone-500 border border-transparent hover:bg-stone-200'
-                  }`}
+                  className={isOn ? 'pq-badge pq-badge-success' : 'pq-badge pq-badge-muted'}
+                  style={{
+                    cursor: 'pointer',
+                    border: 'none',
+                    fontFamily: 'var(--font-body)',
+                    transition: 'var(--transition-fast)',
+                    opacity: isOn ? 1 : 0.7,
+                  }}
                 >
                   {tag}
                 </button>
@@ -473,7 +515,7 @@ export default function MissionsPage() {
             })}
           </div>
           {selectedTags.size > 0 && (
-            <p className="text-xs text-stone-400">
+            <p style={{ color: 'var(--color-text-muted)', fontFamily: 'var(--font-body)', fontSize: '0.75rem' }}>
               Showing missions with any of: {[...selectedTags].join(', ')}
             </p>
           )}
@@ -487,18 +529,25 @@ export default function MissionsPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search missions..."
-          className="px-3 py-2 rounded-lg border border-stone-300 text-sm text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-600 w-64"
+          className="pq-input w-64"
         />
-        <div className="flex rounded-lg border border-stone-300 overflow-hidden">
+        <div
+          className="flex overflow-hidden"
+          style={{ borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}
+        >
           {['all', 'active', 'inactive'].map((s) => (
             <button
               key={s}
               onClick={() => setStatusFilter(s)}
-              className={`px-3 py-2 text-xs font-medium capitalize transition-colors ${
-                statusFilter === s
-                  ? 'bg-emerald-700 text-white'
-                  : 'bg-white text-stone-500 hover:bg-stone-50'
-              }`}
+              className="px-3 py-2 text-xs font-medium capitalize"
+              style={{
+                transition: 'var(--transition-fast)',
+                fontFamily: 'var(--font-body)',
+                backgroundColor: statusFilter === s ? 'var(--color-primary)' : 'var(--color-surface)',
+                color: statusFilter === s ? 'var(--color-text-inverse)' : 'var(--color-text-muted)',
+                border: 'none',
+                cursor: 'pointer',
+              }}
             >
               {s}
             </button>
@@ -506,11 +555,13 @@ export default function MissionsPage() {
         </div>
       </div>
 
-      {/* Mission list */}
-      <div className="text-sm text-stone-400">
+      {/* Mission count */}
+      <div style={{ color: 'var(--color-text-muted)', fontFamily: 'var(--font-body)', fontSize: '0.875rem' }}>
         {filtered.length} mission{filtered.length !== 1 ? 's' : ''}
         {filtered.length !== missions.length && ` of ${missions.length} total`}
       </div>
+
+      {/* Mission list */}
       <div className="space-y-2">
         {filtered.map((m) => (
           <MissionRow
@@ -526,7 +577,10 @@ export default function MissionsPage() {
         ))}
       </div>
       {filtered.length === 0 && (
-        <p className="text-stone-400 text-sm text-center py-4">
+        <p
+          className="text-center py-4"
+          style={{ color: 'var(--color-text-muted)', fontFamily: 'var(--font-body)', fontSize: '0.875rem' }}
+        >
           No missions match your filters.
         </p>
       )}
@@ -541,18 +595,22 @@ function MissionRow({ mission, categories, editing, onEdit, onSave, onCancel, on
 
   if (editing) {
     return (
-      <div className="rounded-xl bg-white border border-emerald-300 p-4 space-y-2">
+      <div
+        className="pq-card space-y-2"
+        style={{ borderColor: 'var(--color-primary-light)' }}
+      >
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
           rows={2}
-          className="w-full px-3 py-2 rounded-lg border border-stone-300 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+          className="pq-input w-full"
+          style={{ resize: 'vertical' }}
         />
         <div className="flex gap-3">
           <select
             value={categoryId}
             onChange={(e) => setCategoryId(e.target.value)}
-            className="flex-1 px-3 py-2 rounded-lg border border-stone-300 text-sm text-stone-800"
+            className="pq-input flex-1"
           >
             {categories.map((c) => (
               <option key={c.id} value={c.id}>
@@ -565,20 +623,17 @@ function MissionRow({ mission, categories, editing, onEdit, onSave, onCancel, on
             value={tags}
             onChange={(e) => setTags(e.target.value)}
             placeholder="Tags (comma-separated)"
-            className="flex-1 px-3 py-2 rounded-lg border border-stone-300 text-sm text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+            className="pq-input flex-1"
           />
         </div>
         <div className="flex gap-2">
           <button
             onClick={() => onSave(mission.id, text, categoryId, tags)}
-            className="px-3 py-1.5 rounded-lg bg-emerald-700 text-white text-sm font-medium hover:bg-emerald-800"
+            className="pq-btn pq-btn-primary"
           >
             Save
           </button>
-          <button
-            onClick={onCancel}
-            className="px-3 py-1.5 rounded-lg text-stone-500 text-sm hover:bg-stone-100"
-          >
+          <button onClick={onCancel} className="pq-btn pq-btn-ghost">
             Cancel
           </button>
         </div>
@@ -588,40 +643,32 @@ function MissionRow({ mission, categories, editing, onEdit, onSave, onCancel, on
 
   return (
     <div
-      className={`rounded-xl bg-white border p-4 flex items-start gap-3 ${
-        mission.active ? 'border-stone-200' : 'border-stone-200 opacity-50'
-      }`}
+      className="pq-card-interactive flex items-start gap-3"
+      style={{ opacity: mission.active ? 1 : 0.5 }}
     >
       <div className="flex-1 min-w-0">
-        <p className="text-sm text-stone-800">{mission.text}</p>
+        <p style={{ color: 'var(--color-text)', fontFamily: 'var(--font-body)', fontSize: '0.875rem' }}>
+          {mission.text}
+        </p>
         <div className="flex flex-wrap items-center gap-2 mt-1.5">
-          <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
+          <span className="pq-badge pq-badge-primary">
             {mission.categories?.name}
           </span>
           {mission.tags?.map((t) => (
-            <span
-              key={t}
-              className="text-xs bg-stone-100 text-stone-500 px-1.5 py-0.5 rounded"
-            >
+            <span key={t} className="pq-badge pq-badge-muted">
               {t}
             </span>
           ))}
         </div>
       </div>
       <div className="flex items-center gap-2 shrink-0">
-        <button
-          onClick={onEdit}
-          className="text-stone-400 text-xs hover:text-stone-600"
-        >
+        <button onClick={onEdit} className="pq-btn pq-btn-ghost" style={{ fontSize: '0.75rem' }}>
           Edit
         </button>
         <button
           onClick={onToggle}
-          className={`text-xs px-2 py-1 rounded-lg font-medium ${
-            mission.active
-              ? 'text-red-600 hover:bg-red-50'
-              : 'text-emerald-600 hover:bg-emerald-50'
-          }`}
+          className={mission.active ? 'pq-btn pq-btn-danger' : 'pq-btn pq-btn-primary'}
+          style={{ fontSize: '0.75rem' }}
         >
           {mission.active ? 'Deactivate' : 'Activate'}
         </button>

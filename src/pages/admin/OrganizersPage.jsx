@@ -56,38 +56,122 @@ export default function OrganizersPage() {
     setLoading(false)
   }
 
-  if (loading) return <p className="text-stone-500">Loading organizers...</p>
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="pq-spinner" />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-stone-800">Organizer Accounts</h2>
-
-      <div className="text-sm text-stone-400">
-        {organizers.length} organizer{organizers.length !== 1 ? 's' : ''}
+      <div className="flex items-center justify-between">
+        <h2
+          className="text-2xl font-bold"
+          style={{ fontFamily: 'var(--font-heading)', color: 'var(--color-text)' }}
+        >
+          Organizer Accounts
+        </h2>
+        <span
+          className="text-sm font-medium px-3 py-1"
+          style={{
+            color: 'var(--color-text-muted)',
+            backgroundColor: 'var(--color-surface)',
+            borderRadius: 'var(--radius-full)',
+          }}
+        >
+          {organizers.length} organizer{organizers.length !== 1 ? 's' : ''}
+        </span>
       </div>
 
       {organizers.length === 0 ? (
-        <p className="text-stone-400 text-sm text-center py-8">No organizers yet.</p>
+        <div
+          className="pq-card text-center py-12"
+        >
+          <p
+            className="text-sm"
+            style={{ color: 'var(--color-text-muted)' }}
+          >
+            No organizers yet.
+          </p>
+        </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-stone-400 border-b border-stone-200">
-                <th className="pb-2 font-medium">Email / ID</th>
-                <th className="pb-2 font-medium">Total Events</th>
-                <th className="pb-2 font-medium">Active Events</th>
-              </tr>
-            </thead>
-            <tbody>
-              {organizers.map((org) => (
-                <tr key={org.id} className="border-b border-stone-100">
-                  <td className="py-3 text-stone-800">{org.email}</td>
-                  <td className="py-3 text-stone-600">{org.eventCount}</td>
-                  <td className="py-3 text-stone-600">{org.activeCount}</td>
+        <div className="pq-card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr
+                  style={{
+                    borderBottom: '2px solid var(--color-border)',
+                  }}
+                >
+                  {['Email / ID', 'Total Events', 'Active Events'].map((header) => (
+                    <th
+                      key={header}
+                      className="pb-3 pt-1 text-left font-semibold text-xs uppercase tracking-wider px-4"
+                      style={{ color: 'var(--color-text-muted)', fontFamily: 'var(--font-body)' }}
+                    >
+                      {header}
+                    </th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {organizers.map((org) => (
+                  <tr
+                    key={org.id}
+                    style={{
+                      borderBottom: '1px solid var(--color-border-light)',
+                      transition: 'var(--transition-fast)',
+                    }}
+                    onMouseEnter={(e) =>
+                      (e.currentTarget.style.backgroundColor = 'var(--color-surface-hover)')
+                    }
+                    onMouseLeave={(e) =>
+                      (e.currentTarget.style.backgroundColor = 'transparent')
+                    }
+                  >
+                    <td
+                      className="py-3.5 px-4 font-medium"
+                      style={{ color: 'var(--color-text)' }}
+                    >
+                      {org.email}
+                    </td>
+                    <td
+                      className="py-3.5 px-4"
+                      style={{ color: 'var(--color-text-secondary)' }}
+                    >
+                      <span
+                        className="inline-flex items-center justify-center w-7 h-7 text-xs font-semibold"
+                        style={{
+                          backgroundColor: 'var(--color-primary-subtle)',
+                          color: 'var(--color-primary)',
+                          borderRadius: 'var(--radius-full)',
+                        }}
+                      >
+                        {org.eventCount}
+                      </span>
+                    </td>
+                    <td
+                      className="py-3.5 px-4"
+                      style={{ color: 'var(--color-text-secondary)' }}
+                    >
+                      {org.activeCount > 0 ? (
+                        <span className="pq-badge pq-badge-success">
+                          {org.activeCount} active
+                        </span>
+                      ) : (
+                        <span className="pq-badge pq-badge-muted">
+                          none
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

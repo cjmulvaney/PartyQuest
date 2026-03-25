@@ -1,16 +1,17 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
+import { useTheme } from '../hooks/useTheme.jsx'
 import Leaderboard from '../components/Leaderboard.jsx'
 import ActivityFeed from '../components/ActivityFeed.jsx'
 
 export default function Spectator() {
   const navigate = useNavigate()
+  const { theme, toggleTheme } = useTheme()
   const [eventCode, setEventCode] = useState('')
   const [event, setEvent] = useState(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [tab, setTab] = useState('leaderboard')
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -36,91 +37,131 @@ export default function Spectator() {
 
   if (event) {
     return (
-      <div className="min-h-screen bg-stone-100 px-4 pt-6 pb-8">
-        <div className="max-w-lg mx-auto">
-          <div className="flex items-center justify-between mb-6">
+      <div className="min-h-screen" style={{ backgroundColor: 'var(--color-bg)', padding: '1.5rem 1rem 2rem' }}>
+        <div style={{ maxWidth: '56rem', margin: '0 auto' }}>
+          {/* Header */}
+          <div className="flex items-start justify-between animate-fade-in" style={{ marginBottom: '1.5rem' }}>
             <div>
-              <p className="text-stone-400 text-sm">Spectator View</p>
-              <h1 className="text-2xl font-bold text-stone-800">{event.name}</h1>
+              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', fontFamily: 'var(--font-body)', marginBottom: '2px' }}>
+                Spectator View
+              </p>
+              <h1 style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: '1.75rem', color: 'var(--color-text)', margin: 0 }}>
+                {event.name}
+              </h1>
             </div>
-            <button
-              onClick={() => setEvent(null)}
-              className="text-stone-400 text-sm hover:text-stone-600 transition-colors"
-            >
-              Exit
-            </button>
-          </div>
-
-          {/* Tabs */}
-          <div className="flex border-b border-stone-200 mb-6">
-            {['leaderboard', 'feed'].map((t) => (
+            <div className="flex items-center gap-2">
               <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={`flex-1 py-2 text-center text-sm font-medium transition-colors ${
-                  tab === t
-                    ? 'text-emerald-700 border-b-2 border-emerald-700'
-                    : 'text-stone-400 hover:text-stone-600'
-                }`}
+                className="theme-toggle"
+                data-active={theme === 'dark'}
+                onClick={toggleTheme}
+                aria-label="Toggle dark mode"
+              />
+              <button
+                onClick={() => setEvent(null)}
+                className="pq-btn pq-btn-ghost"
+                style={{ padding: '6px 12px', fontSize: '0.8rem', minHeight: 'auto' }}
               >
-                {t === 'leaderboard' ? 'Leaderboard' : 'Feed'}
+                Exit
               </button>
-            ))}
+            </div>
           </div>
 
-          {tab === 'leaderboard' && (
-            <Leaderboard
-              eventId={event.id}
-              anonymity={event.anonymity_enabled}
-              fullscreen
-            />
-          )}
+          {/* Combined layout: Leaderboard + Feed side by side on desktop, stacked on mobile */}
+          <div
+            className="animate-slide-up"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 20rem), 1fr))',
+              gap: '1.5rem',
+              alignItems: 'start',
+            }}
+          >
+            {/* Leaderboard */}
+            <div>
+              <Leaderboard
+                eventId={event.id}
+                anonymity={event.anonymity_enabled}
+                fullscreen
+              />
+            </div>
 
-          {tab === 'feed' && (
-            <ActivityFeed
-              eventId={event.id}
-              feedMode={event.feed_mode || 'secret'}
-            />
-          )}
+            {/* Activity Feed */}
+            <div>
+              <ActivityFeed
+                eventId={event.id}
+                feedMode={event.feed_mode || 'secret'}
+              />
+            </div>
+          </div>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-stone-100 px-4">
-      <div className="max-w-sm w-full space-y-6">
+    <div className="min-h-screen flex items-center justify-center px-4" style={{ backgroundColor: 'var(--color-bg)' }}>
+      <div style={{ maxWidth: '24rem', width: '100%' }}>
         <button
           onClick={() => navigate('/')}
-          className="text-stone-400 text-sm hover:text-stone-600 transition-colors"
+          className="pq-btn pq-btn-ghost animate-fade-in"
+          style={{ padding: '6px 0', fontSize: '0.85rem', minHeight: 'auto', marginBottom: '1.5rem' }}
         >
-          &larr; Back
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M19 12H5" /><path d="M12 19l-7-7 7-7" />
+          </svg>
+          Back
         </button>
 
-        <h1 className="text-3xl font-bold text-emerald-700">Spectator View</h1>
-        <p className="text-stone-500 text-sm">
-          Enter the event code to view the leaderboard and activity feed.
-        </p>
+        <div className="animate-slide-up" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <div>
+            <h1 style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: '1.75rem', color: 'var(--color-text)', margin: '0 0 0.5rem' }}>
+              Spectator View
+            </h1>
+            <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.9rem', margin: 0 }}>
+              Enter the event code to watch the leaderboard and activity feed in real time.
+            </p>
+          </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <input
-            type="text"
-            value={eventCode}
-            onChange={(e) => setEventCode(e.target.value.toUpperCase())}
-            placeholder="Event Code"
-            maxLength={6}
-            className="w-full text-center text-2xl font-mono tracking-widest px-4 py-3 rounded-xl border border-stone-300 bg-white text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-transparent"
-            autoFocus
-          />
-          {error && <p className="text-red-600 text-sm">{error}</p>}
-          <button
-            type="submit"
-            disabled={loading || eventCode.trim().length < 3}
-            className="w-full py-3 rounded-xl bg-emerald-700 text-white font-semibold text-lg hover:bg-emerald-800 active:bg-emerald-900 transition-colors disabled:opacity-50"
-          >
-            {loading ? 'Loading...' : 'Watch Event'}
-          </button>
-        </form>
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <input
+              type="text"
+              value={eventCode}
+              onChange={(e) => setEventCode(e.target.value.toUpperCase())}
+              placeholder="EVENT CODE"
+              maxLength={6}
+              className="pq-input"
+              style={{
+                textAlign: 'center',
+                fontSize: '1.5rem',
+                fontFamily: 'var(--font-heading)',
+                letterSpacing: '0.2em',
+                fontWeight: 600,
+                padding: '14px',
+              }}
+              autoFocus
+            />
+
+            {error && (
+              <p className="animate-scale-in" style={{ color: 'var(--color-danger)', fontSize: '0.85rem', margin: 0 }}>
+                {error}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading || eventCode.trim().length < 3}
+              className="pq-btn pq-btn-primary"
+              style={{ width: '100%', fontSize: '1rem', padding: '12px' }}
+            >
+              {loading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="pq-spinner" style={{ width: 18, height: 18, borderWidth: 2 }} />
+                  Loading...
+                </span>
+              ) : 'Watch Event'}
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   )

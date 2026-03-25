@@ -14,6 +14,8 @@ const EVENT_TYPES = [
 
 const HOW_HEARD_OPTIONS = ['Friend', 'Social media', 'Search', 'Other']
 
+const STEP_LABELS = ['Event Basics', 'Participants', 'Missions', 'Review']
+
 export default function CreateEvent() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -175,10 +177,15 @@ export default function CreateEvent() {
 
   if (authLoading || !user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-stone-100">
-        <div className="text-center space-y-3">
-          <div className="w-8 h-8 border-3 border-emerald-700 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-stone-500">Loading...</p>
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: 'var(--color-bg)' }}
+      >
+        <div className="flex flex-col items-center gap-3">
+          <div className="pq-spinner" />
+          <p style={{ color: 'var(--color-text-muted)', fontFamily: 'var(--font-body)' }}>
+            Loading...
+          </p>
         </div>
       </div>
     )
@@ -437,10 +444,11 @@ export default function CreateEvent() {
   const poolTooSmall = availableMissionCount < totalMissionsNeeded
 
   return (
-    <div className="min-h-screen bg-stone-100">
-      <div className="max-w-md mx-auto px-4 py-6">
+    <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
+      <div className="max-w-2xl mx-auto px-6 py-10">
+
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-8">
           <button
             onClick={() => {
               if (launched) {
@@ -451,430 +459,720 @@ export default function CreateEvent() {
                 prevStep()
               }
             }}
-            className="text-stone-400 text-sm hover:text-stone-600 transition-colors"
+            className="pq-btn pq-btn-ghost"
+            style={{ fontFamily: 'var(--font-body)' }}
           >
-            {launched ? 'View Event' : step === 1 ? '← Back' : '← Back'}
+            {launched ? 'View Event' : step === 1 ? 'Back' : 'Back'}
           </button>
-          <span className="text-stone-400 text-sm">
-            {!launched && `Step ${step} of 4`}
-          </span>
+          <h1
+            style={{
+              fontFamily: 'var(--font-heading)',
+              color: 'var(--color-primary)',
+              fontSize: '1.25rem',
+              fontWeight: 700,
+            }}
+          >
+            {isEditMode ? 'Edit Event' : 'Create Event'}
+          </h1>
+          <div className="w-16" />
         </div>
 
-        {/* Progress bar */}
+        {/* Step Progress Indicator */}
         {!launched && (
-          <div className="flex gap-2 mb-8">
-            {[1, 2, 3, 4].map((s) => (
-              <div
-                key={s}
-                className={`flex-1 h-1.5 rounded-full ${
-                  s <= step ? 'bg-emerald-700' : 'bg-stone-300'
-                }`}
-              />
-            ))}
-          </div>
-        )}
-
-        {/* Step 1 — Event Basics */}
-        {step === 1 && (
-          <div className="space-y-5">
-            <h2 className="text-2xl font-bold text-stone-800">Event Basics</h2>
-            <p className="text-stone-400 text-sm">Tell us about your event. The start and end times control when missions go live and when the event wraps up.</p>
-
-            <div>
-              <label className="block text-sm font-medium text-stone-600 mb-1">
-                Event Name *
-              </label>
-              <input
-                type="text"
-                value={eventName}
-                onChange={(e) => setEventName(e.target.value)}
-                placeholder="e.g. Sarah's Birthday Bash"
-                className="w-full px-4 py-3 rounded-xl border border-stone-300 bg-white text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-transparent"
-                autoFocus
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-stone-600 mb-1">
-                Event Type
-              </label>
-              <select
-                value={eventType}
-                onChange={(e) => setEventType(e.target.value)}
-                disabled={isEditMode && editEventStatus === 'active'}
-                className="w-full px-4 py-3 rounded-xl border border-stone-300 bg-white text-stone-800 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-transparent disabled:opacity-50"
-              >
-                {EVENT_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-              {isEditMode && editEventStatus === 'active' && (
-                <p className="text-stone-400 text-xs mt-1">Cannot change event type while active</p>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-stone-600 mb-1">
-                  Start
-                </label>
-                <input
-                  type="datetime-local"
-                  value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
-                  className="w-full px-3 py-3 rounded-xl border border-stone-300 bg-white text-stone-800 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-transparent text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-stone-600 mb-1">
-                  End
-                </label>
-                <input
-                  type="datetime-local"
-                  value={endTime}
-                  onChange={(e) => setEndTime(e.target.value)}
-                  className="w-full px-3 py-3 rounded-xl border border-stone-300 bg-white text-stone-800 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-transparent text-sm"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-stone-600 mb-1">
-                How did you hear about Party Quest?
-              </label>
-              <select
-                value={howHeard}
-                onChange={(e) => setHowHeard(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border border-stone-300 bg-white text-stone-800 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-transparent"
-              >
-                <option value="">-- Optional --</option>
-                {HOW_HEARD_OPTIONS.map((o) => (
-                  <option key={o} value={o.toLowerCase()}>
-                    {o}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={emailOptIn}
-                  onChange={(e) => setEmailOptIn(e.target.checked)}
-                  className="w-5 h-5 rounded border-stone-300 text-emerald-700 focus:ring-emerald-600"
-                />
-                <span className="text-sm text-stone-600">
-                  Send me a post-event summary
-                </span>
-              </label>
-              {emailOptIn && (
-                <input
-                  type="email"
-                  value={organizerEmail}
-                  onChange={(e) => setOrganizerEmail(e.target.value)}
-                  placeholder="your@email.com"
-                  className="w-full px-4 py-3 rounded-xl border border-stone-300 bg-white text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-transparent"
-                />
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Step 2 — Participants */}
-        {step === 2 && (
-          <div className="space-y-5">
-            <h2 className="text-2xl font-bold text-stone-800">Participants</h2>
-            <p className="text-stone-400 text-sm">You can add people now, share an invite link later, or both. Don't stress about getting everyone — you can always add more after the event is created.</p>
-
-            {/* Invite link info */}
-            <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4">
-              <h4 className="text-emerald-800 text-sm font-semibold mb-1">Option A: Share an invite link</h4>
-              <p className="text-emerald-700 text-xs">After creating the event, you'll get a shareable link and QR code. Send it out and guests register themselves — no names needed upfront.</p>
-            </div>
-
-            {/* Pre-register names */}
-            <div className="rounded-xl bg-white border border-stone-200 p-4 space-y-3">
-              <div>
-                <h4 className="text-stone-700 text-sm font-semibold mb-1">Option B: Add names now</h4>
-                <p className="text-stone-400 text-xs mb-2">If you already know who's coming, add their names and you'll get individual access codes to hand out.</p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-stone-600 mb-1">
-                  Expected headcount
-                </label>
-                <input
-                  type="number"
-                  value={participantCount}
-                  onChange={(e) =>
-                    setParticipantCount(
-                      Math.max(1, parseInt(e.target.value) || 1)
-                    )
-                  }
-                  min={1}
-                  max={200}
-                  className="w-full px-4 py-3 rounded-xl border border-stone-300 bg-white text-stone-800 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-transparent"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-stone-600 mb-1">
-                  Names (optional)
-                </label>
-                <textarea
-                  ref={textareaRef}
-                  value={participantNames}
-                  onChange={(e) => setParticipantNames(e.target.value)}
-                  placeholder={"Jake\nSarah\nMike\nTaylor"}
-                  rows={4}
-                  style={{ minHeight: '120px', maxHeight: '400px', overflow: 'auto' }}
-                  className="w-full px-4 py-3 rounded-xl border border-stone-300 bg-white text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-transparent resize-none"
-                />
-                <p className="text-stone-400 text-xs mt-1">One per line. Any unnamed slots can be filled via invite link later.</p>
-              </div>
-            </div>
-
-            <label className="flex items-center gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={anonymityEnabled}
-                onChange={(e) => setAnonymityEnabled(e.target.checked)}
-                className="w-5 h-5 rounded border-stone-300 text-emerald-700 focus:ring-emerald-600"
-              />
-              <span className="text-sm text-stone-600">
-                Hide participant names on leaderboard
-              </span>
-            </label>
-          </div>
-        )}
-
-        {/* Step 3 — Missions */}
-        {step === 3 && (
-          <div className="space-y-5">
-            <h2 className="text-2xl font-bold text-stone-800">Missions</h2>
-            <p className="text-stone-400 text-sm">Choose how many missions each guest gets and how they unlock. Missions are pulled from our library based on the categories you pick.</p>
-
-            {isEditMode && editEventStatus === 'active' && (
-              <p className="text-amber-600 text-sm bg-amber-50 border border-amber-200 rounded-xl p-3">
-                Mission settings cannot be changed while the event is active.
-              </p>
-            )}
-
-            <div>
-              <label className="block text-sm font-medium text-stone-600 mb-2">
-                Missions per participant: {missionCount}
-              </label>
-              <input
-                type="range"
-                min={1}
-                max={5}
-                value={missionCount}
-                onChange={(e) => setMissionCount(parseInt(e.target.value))}
-                disabled={isEditMode && editEventStatus === 'active'}
-                className="w-full accent-emerald-700 disabled:opacity-50"
-              />
-              <div className="flex justify-between text-xs text-stone-400 mt-1">
-                <span>1</span>
-                <span>2</span>
-                <span>3</span>
-                <span>4</span>
-                <span>5</span>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-stone-600 mb-1">
-                Unlock Type
-              </label>
-              <p className="text-stone-400 text-xs mb-2">All at once = guests see every mission from the start. Timed = missions reveal throughout the event to keep things exciting.</p>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setUnlockType('all_at_once')}
-                  className={`py-3 rounded-xl text-sm font-medium transition-colors ${
-                    unlockType === 'all_at_once'
-                      ? 'bg-emerald-700 text-white'
-                      : 'bg-white border border-stone-300 text-stone-600 hover:bg-stone-50'
-                  }`}
-                >
-                  All at Once
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setUnlockType('timed')}
-                  className={`py-3 rounded-xl text-sm font-medium transition-colors ${
-                    unlockType === 'timed'
-                      ? 'bg-emerald-700 text-white'
-                      : 'bg-white border border-stone-300 text-stone-600 hover:bg-stone-50'
-                  }`}
-                >
-                  Timed Release
-                </button>
-              </div>
-            </div>
-
-            {unlockType === 'timed' && (
-              <div className="space-y-3">
-                <label className="block text-sm font-medium text-stone-600">
-                  Unlock Times
-                </label>
-                {unlockTimes.map((time, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <span className="text-stone-400 text-sm w-16">
-                      Slot {i + 1}
-                    </span>
-                    <input
-                      type="datetime-local"
-                      value={time}
-                      onChange={(e) => {
-                        const updated = [...unlockTimes]
-                        updated[i] = e.target.value
-                        setUnlockTimes(updated)
+          <div className="flex items-center justify-between mb-10 px-2">
+            {STEP_LABELS.map((label, i) => {
+              const stepNum = i + 1
+              const isComplete = stepNum < step
+              const isCurrent = stepNum === step
+              const isFuture = stepNum > step
+              return (
+                <div key={stepNum} className="flex items-center" style={{ flex: i < STEP_LABELS.length - 1 ? 1 : 'none' }}>
+                  {/* Step circle + label */}
+                  <div className="flex flex-col items-center gap-1.5" style={{ minWidth: '64px' }}>
+                    <div
+                      className="flex items-center justify-center"
+                      style={{
+                        width: '36px',
+                        height: '36px',
+                        borderRadius: 'var(--radius-full)',
+                        fontFamily: 'var(--font-heading)',
+                        fontWeight: 700,
+                        fontSize: '0.875rem',
+                        transition: 'var(--transition-base)',
+                        background: isCurrent
+                          ? 'var(--color-primary)'
+                          : isComplete
+                            ? 'var(--color-success)'
+                            : 'var(--color-surface)',
+                        color: isCurrent || isComplete
+                          ? 'var(--color-text-inverse)'
+                          : 'var(--color-text-muted)',
+                        border: isFuture ? '2px solid var(--color-border)' : 'none',
+                        boxShadow: isCurrent ? 'var(--shadow-glow)' : 'none',
                       }}
-                      className="flex-1 px-3 py-2 rounded-xl border border-stone-300 bg-white text-stone-800 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-transparent text-sm"
+                    >
+                      {isComplete ? '\u2713' : stepNum}
+                    </div>
+                    <span
+                      style={{
+                        fontFamily: 'var(--font-body)',
+                        fontSize: '0.75rem',
+                        fontWeight: isCurrent ? 600 : 400,
+                        color: isCurrent
+                          ? 'var(--color-primary)'
+                          : isComplete
+                            ? 'var(--color-success)'
+                            : 'var(--color-text-muted)',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {label}
+                    </span>
+                  </div>
+                  {/* Connector line */}
+                  {i < STEP_LABELS.length - 1 && (
+                    <div
+                      className="mx-2"
+                      style={{
+                        flex: 1,
+                        height: '2px',
+                        borderRadius: 'var(--radius-full)',
+                        background: isComplete
+                          ? 'var(--color-success)'
+                          : 'var(--color-border-light)',
+                        marginBottom: '24px',
+                        transition: 'var(--transition-base)',
+                      }}
+                    />
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Step 1 -- Event Basics */}
+        {step === 1 && (
+          <div className="pq-card animate-fade-in" style={{ padding: '2rem' }}>
+            <div className="mb-6">
+              <h2
+                style={{
+                  fontFamily: 'var(--font-heading)',
+                  color: 'var(--color-text)',
+                  fontSize: '1.75rem',
+                  fontWeight: 700,
+                  marginBottom: '0.5rem',
+                }}
+              >
+                Event Basics
+              </h2>
+              <p style={{ color: 'var(--color-text-secondary)', fontFamily: 'var(--font-body)', fontSize: '0.875rem', lineHeight: 1.5 }}>
+                Tell us about your event. The start and end times control when missions go live and when the event wraps up.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-5">
+              {/* Event Name */}
+              <div>
+                <label
+                  className="block mb-1.5"
+                  style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}
+                >
+                  Event Name *
+                </label>
+                <input
+                  type="text"
+                  value={eventName}
+                  onChange={(e) => setEventName(e.target.value)}
+                  placeholder="e.g. Sarah's Birthday Bash"
+                  className="pq-input w-full"
+                  autoFocus
+                />
+              </div>
+
+              {/* Event Type */}
+              <div>
+                <label
+                  className="block mb-1.5"
+                  style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}
+                >
+                  Event Type
+                </label>
+                <select
+                  value={eventType}
+                  onChange={(e) => setEventType(e.target.value)}
+                  disabled={isEditMode && editEventStatus === 'active'}
+                  className="pq-input w-full"
+                  style={{ cursor: (isEditMode && editEventStatus === 'active') ? 'not-allowed' : 'pointer' }}
+                >
+                  {EVENT_TYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+                {isEditMode && editEventStatus === 'active' && (
+                  <p style={{ color: 'var(--color-text-muted)', fontFamily: 'var(--font-body)', fontSize: '0.75rem', marginTop: '0.25rem' }}>
+                    Cannot change event type while active
+                  </p>
+                )}
+              </div>
+
+              {/* Start / End times */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label
+                    className="block mb-1.5"
+                    style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}
+                  >
+                    Start
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
+                    className="pq-input w-full"
+                  />
+                </div>
+                <div>
+                  <label
+                    className="block mb-1.5"
+                    style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}
+                  >
+                    End
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={endTime}
+                    onChange={(e) => setEndTime(e.target.value)}
+                    className="pq-input w-full"
+                  />
+                </div>
+              </div>
+
+              {/* How heard */}
+              <div>
+                <label
+                  className="block mb-1.5"
+                  style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}
+                >
+                  How did you hear about Party Quest?
+                </label>
+                <select
+                  value={howHeard}
+                  onChange={(e) => setHowHeard(e.target.value)}
+                  className="pq-input w-full"
+                >
+                  <option value="">-- Optional --</option>
+                  {HOW_HEARD_OPTIONS.map((o) => (
+                    <option key={o} value={o.toLowerCase()}>
+                      {o}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Email opt-in */}
+              <div className="flex flex-col gap-2">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={emailOptIn}
+                    onChange={(e) => setEmailOptIn(e.target.checked)}
+                    style={{ accentColor: 'var(--color-primary)', width: '18px', height: '18px' }}
+                  />
+                  <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>
+                    Send me a post-event summary
+                  </span>
+                </label>
+                {emailOptIn && (
+                  <input
+                    type="email"
+                    value={organizerEmail}
+                    onChange={(e) => setOrganizerEmail(e.target.value)}
+                    placeholder="your@email.com"
+                    className="pq-input w-full"
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Step 2 -- Participants */}
+        {step === 2 && (
+          <div className="animate-fade-in flex flex-col gap-5">
+            <div className="pq-card" style={{ padding: '2rem' }}>
+              <div className="mb-6">
+                <h2
+                  style={{
+                    fontFamily: 'var(--font-heading)',
+                    color: 'var(--color-text)',
+                    fontSize: '1.75rem',
+                    fontWeight: 700,
+                    marginBottom: '0.5rem',
+                  }}
+                >
+                  Participants
+                </h2>
+                <p style={{ color: 'var(--color-text-secondary)', fontFamily: 'var(--font-body)', fontSize: '0.875rem', lineHeight: 1.5 }}>
+                  You can add people now, share an invite link later, or both. Don't stress about getting everyone -- you can always add more after the event is created.
+                </p>
+              </div>
+
+              {/* Invite link callout */}
+              <div
+                className="mb-5"
+                style={{
+                  borderRadius: 'var(--radius-lg)',
+                  background: 'var(--color-primary-subtle)',
+                  border: '1px solid var(--color-primary-light)',
+                  padding: '1rem 1.25rem',
+                }}
+              >
+                <h4 style={{ fontFamily: 'var(--font-heading)', fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-primary)', marginBottom: '0.25rem' }}>
+                  Option A: Share an invite link
+                </h4>
+                <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.8rem', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+                  After creating the event, you'll get a shareable link and QR code. Send it out and guests register themselves -- no names needed upfront.
+                </p>
+              </div>
+
+              {/* Pre-register names card */}
+              <div
+                style={{
+                  borderRadius: 'var(--radius-lg)',
+                  background: 'var(--color-surface)',
+                  border: '1px solid var(--color-border-light)',
+                  padding: '1.25rem',
+                }}
+              >
+                <div className="mb-4">
+                  <h4 style={{ fontFamily: 'var(--font-heading)', fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)', marginBottom: '0.25rem' }}>
+                    Option B: Add names now
+                  </h4>
+                  <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.8rem', color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+                    If you already know who's coming, add their names and you'll get individual access codes to hand out.
+                  </p>
+                </div>
+
+                <div className="flex flex-col gap-4">
+                  <div>
+                    <label
+                      className="block mb-1.5"
+                      style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}
+                    >
+                      Expected headcount
+                    </label>
+                    <input
+                      type="number"
+                      value={participantCount}
+                      onChange={(e) =>
+                        setParticipantCount(
+                          Math.max(1, parseInt(e.target.value) || 1)
+                        )
+                      }
+                      min={1}
+                      max={200}
+                      className="pq-input w-full"
                     />
                   </div>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => setUnlockTimes([...unlockTimes, ''])}
-                  className="text-emerald-700 text-sm font-medium hover:underline"
-                >
-                  + Add unlock time
-                </button>
-              </div>
-            )}
 
-            <div>
-              <label className="block text-sm font-medium text-stone-600 mb-2">
-                Categories
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {categories.map((cat) => {
-                  const isSelected = selectedTags.includes(cat.id)
-                  return (
-                    <button
-                      key={cat.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedTags((prev) =>
-                          isSelected
-                            ? prev.filter((t) => t !== cat.id)
-                            : [...prev, cat.id]
-                        )
-                      }}
-                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                        isSelected
-                          ? 'bg-emerald-700 text-white'
-                          : 'bg-white border border-stone-300 text-stone-500 hover:bg-stone-50'
-                      }`}
+                  <div>
+                    <label
+                      className="block mb-1.5"
+                      style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}
                     >
-                      {cat.name}
-                    </button>
-                  )
-                })}
+                      Names (optional)
+                    </label>
+                    <textarea
+                      ref={textareaRef}
+                      value={participantNames}
+                      onChange={(e) => setParticipantNames(e.target.value)}
+                      placeholder={"Jake\nSarah\nMike\nTaylor"}
+                      rows={4}
+                      style={{ minHeight: '120px', maxHeight: '400px', overflow: 'auto', resize: 'none' }}
+                      className="pq-input w-full"
+                    />
+                    <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.375rem' }}>
+                      One per line. Any unnamed slots can be filled via invite link later.
+                    </p>
+                  </div>
+                </div>
               </div>
-            </div>
 
-            <div className="rounded-xl bg-stone-200/50 p-4 text-sm text-stone-600">
-              <p>
-                {availableMissionCount} missions available for{' '}
-                {participantCount} participants
-              </p>
-              {poolTooSmall && availableMissionCount > 0 && (
-                <p className="text-amber-600 mt-1">
-                  Some missions will be shared between participants.
-                </p>
-              )}
-              {availableMissionCount === 0 && (
-                <p className="text-red-600 mt-1">
-                  No missions match your selected categories.
-                </p>
-              )}
+              {/* Anonymity toggle */}
+              <div className="mt-5">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={anonymityEnabled}
+                    onChange={(e) => setAnonymityEnabled(e.target.checked)}
+                    style={{ accentColor: 'var(--color-primary)', width: '18px', height: '18px' }}
+                  />
+                  <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>
+                    Hide participant names on leaderboard
+                  </span>
+                </label>
+              </div>
             </div>
           </div>
         )}
 
-        {/* Step 4 — Review + Launch */}
-        {step === 4 && !launched && (
-          <div className="space-y-5">
-            <h2 className="text-2xl font-bold text-stone-800">
-              Review & Launch
-            </h2>
+        {/* Step 3 -- Missions */}
+        {step === 3 && (
+          <div className="pq-card animate-fade-in" style={{ padding: '2rem' }}>
+            <div className="mb-6">
+              <h2
+                style={{
+                  fontFamily: 'var(--font-heading)',
+                  color: 'var(--color-text)',
+                  fontSize: '1.75rem',
+                  fontWeight: 700,
+                  marginBottom: '0.5rem',
+                }}
+              >
+                Missions
+              </h2>
+              <p style={{ color: 'var(--color-text-secondary)', fontFamily: 'var(--font-body)', fontSize: '0.875rem', lineHeight: 1.5 }}>
+                Choose how many missions each guest gets and how they unlock. Missions are pulled from our library based on the categories you pick.
+              </p>
+            </div>
 
-            {/* Event Summary */}
-            <div className="rounded-xl bg-white border border-stone-200 p-4 space-y-3">
-              <h3 className="font-semibold text-stone-800">Event Summary</h3>
-              <div className="space-y-1 text-sm text-stone-600">
-                <p>
-                  <span className="text-stone-400">Name:</span> {eventName}
+            {isEditMode && editEventStatus === 'active' && (
+              <div
+                className="mb-5"
+                style={{
+                  background: 'var(--color-warning-light)',
+                  border: '1px solid var(--color-warning)',
+                  borderRadius: 'var(--radius-lg)',
+                  padding: '0.875rem 1rem',
+                  fontFamily: 'var(--font-body)',
+                  fontSize: '0.875rem',
+                  color: 'var(--color-warning)',
+                }}
+              >
+                Mission settings cannot be changed while the event is active.
+              </div>
+            )}
+
+            <div className="flex flex-col gap-6">
+              {/* Mission count slider */}
+              <div>
+                <label
+                  className="block mb-2"
+                  style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}
+                >
+                  Missions per participant:{' '}
+                  <span style={{ color: 'var(--color-primary)', fontWeight: 700 }}>{missionCount}</span>
+                </label>
+                <input
+                  type="range"
+                  min={1}
+                  max={5}
+                  value={missionCount}
+                  onChange={(e) => setMissionCount(parseInt(e.target.value))}
+                  disabled={isEditMode && editEventStatus === 'active'}
+                  className="w-full"
+                  style={{ accentColor: 'var(--color-primary)' }}
+                />
+                <div className="flex justify-between mt-1">
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <span key={n} style={{ fontFamily: 'var(--font-body)', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                      {n}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Unlock type */}
+              <div>
+                <label
+                  className="block mb-1.5"
+                  style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}
+                >
+                  Unlock Type
+                </label>
+                <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: '0.75rem', lineHeight: 1.5 }}>
+                  All at once = guests see every mission from the start. Timed = missions reveal throughout the event to keep things exciting.
                 </p>
-                <p>
-                  <span className="text-stone-400">Type:</span> {eventType}
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setUnlockType('all_at_once')}
+                    className={unlockType === 'all_at_once' ? 'pq-btn pq-btn-primary' : 'pq-btn pq-btn-secondary'}
+                    style={{ fontFamily: 'var(--font-body)', padding: '0.75rem 1rem' }}
+                  >
+                    All at Once
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setUnlockType('timed')}
+                    className={unlockType === 'timed' ? 'pq-btn pq-btn-primary' : 'pq-btn pq-btn-secondary'}
+                    style={{ fontFamily: 'var(--font-body)', padding: '0.75rem 1rem' }}
+                  >
+                    Timed Release
+                  </button>
+                </div>
+              </div>
+
+              {/* Timed unlock inputs */}
+              {unlockType === 'timed' && (
+                <div className="flex flex-col gap-3">
+                  <label
+                    className="block"
+                    style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}
+                  >
+                    Unlock Times
+                  </label>
+                  {unlockTimes.map((time, i) => (
+                    <div key={i} className="flex items-center gap-3">
+                      <span
+                        style={{
+                          fontFamily: 'var(--font-body)',
+                          fontSize: '0.8rem',
+                          color: 'var(--color-text-muted)',
+                          minWidth: '48px',
+                        }}
+                      >
+                        Slot {i + 1}
+                      </span>
+                      <input
+                        type="datetime-local"
+                        value={time}
+                        onChange={(e) => {
+                          const updated = [...unlockTimes]
+                          updated[i] = e.target.value
+                          setUnlockTimes(updated)
+                        }}
+                        className="pq-input flex-1"
+                      />
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setUnlockTimes([...unlockTimes, ''])}
+                    className="pq-btn pq-btn-ghost"
+                    style={{
+                      fontFamily: 'var(--font-body)',
+                      color: 'var(--color-primary)',
+                      fontWeight: 600,
+                      fontSize: '0.875rem',
+                      alignSelf: 'flex-start',
+                    }}
+                  >
+                    + Add unlock time
+                  </button>
+                </div>
+              )}
+
+              {/* Categories */}
+              <div>
+                <label
+                  className="block mb-2"
+                  style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}
+                >
+                  Categories
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {categories.map((cat) => {
+                    const isSelected = selectedTags.includes(cat.id)
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedTags((prev) =>
+                            isSelected
+                              ? prev.filter((t) => t !== cat.id)
+                              : [...prev, cat.id]
+                          )
+                        }}
+                        className={`pq-badge ${isSelected ? 'pq-badge-primary' : 'pq-badge-muted'}`}
+                        style={{
+                          cursor: 'pointer',
+                          fontFamily: 'var(--font-body)',
+                          fontSize: '0.8rem',
+                          padding: '0.375rem 0.875rem',
+                          borderRadius: 'var(--radius-full)',
+                          transition: 'var(--transition-fast)',
+                          border: isSelected ? 'none' : '1px solid var(--color-border)',
+                        }}
+                      >
+                        {cat.name}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Mission availability summary */}
+              <div
+                style={{
+                  borderRadius: 'var(--radius-lg)',
+                  background: 'var(--color-surface)',
+                  border: '1px solid var(--color-border-light)',
+                  padding: '1rem 1.25rem',
+                }}
+              >
+                <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>
+                  {availableMissionCount} missions available for{' '}
+                  {participantCount} participants
                 </p>
-                <p>
-                  <span className="text-stone-400">Start:</span>{' '}
-                  {new Date(startTime).toLocaleString()}
-                </p>
-                <p>
-                  <span className="text-stone-400">End:</span>{' '}
-                  {new Date(endTime).toLocaleString()}
-                </p>
-                <p>
-                  <span className="text-stone-400">Participants:</span>{' '}
-                  {generatedParticipants.length}
-                </p>
-                <p>
-                  <span className="text-stone-400">Missions each:</span>{' '}
-                  {missionCount}
-                </p>
-                <p>
-                  <span className="text-stone-400">Unlock:</span>{' '}
-                  {unlockType === 'all_at_once' ? 'All at once' : 'Timed release'}
-                </p>
+                {poolTooSmall && availableMissionCount > 0 && (
+                  <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.8rem', color: 'var(--color-warning)', marginTop: '0.375rem' }}>
+                    Some missions will be shared between participants.
+                  </p>
+                )}
+                {availableMissionCount === 0 && (
+                  <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.8rem', color: 'var(--color-danger)', marginTop: '0.375rem' }}>
+                    No missions match your selected categories.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Step 4 -- Review & Launch */}
+        {step === 4 && !launched && (
+          <div className="animate-fade-in flex flex-col gap-5">
+            <div className="pq-card" style={{ padding: '2rem' }}>
+              <h2
+                style={{
+                  fontFamily: 'var(--font-heading)',
+                  color: 'var(--color-text)',
+                  fontSize: '1.75rem',
+                  fontWeight: 700,
+                  marginBottom: '1.5rem',
+                }}
+              >
+                Review & Launch
+              </h2>
+
+              {/* Event Summary */}
+              <div
+                style={{
+                  borderRadius: 'var(--radius-lg)',
+                  background: 'var(--color-surface)',
+                  border: '1px solid var(--color-border-light)',
+                  padding: '1.25rem',
+                  marginBottom: '1.5rem',
+                }}
+              >
+                <h3 style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, color: 'var(--color-text)', marginBottom: '0.75rem', fontSize: '1rem' }}>
+                  Event Summary
+                </h3>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                  {[
+                    ['Name', eventName],
+                    ['Type', eventType],
+                    ['Start', new Date(startTime).toLocaleString()],
+                    ['End', new Date(endTime).toLocaleString()],
+                    ['Participants', generatedParticipants.length],
+                    ['Missions each', missionCount],
+                    ['Unlock', unlockType === 'all_at_once' ? 'All at once' : 'Timed release'],
+                  ].map(([label, value]) => (
+                    <div key={label} className="py-1" style={{ borderBottom: '1px solid var(--color-border-light)' }}>
+                      <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'block' }}>
+                        {label}
+                      </span>
+                      <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', color: 'var(--color-text)', fontWeight: 500 }}>
+                        {value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
                 {anonymityEnabled && (
-                  <p className="text-amber-600">Anonymous leaderboard</p>
+                  <div className="mt-3">
+                    <span className="pq-badge pq-badge-warning" style={{ fontFamily: 'var(--font-body)', fontSize: '0.75rem' }}>
+                      Anonymous leaderboard
+                    </span>
+                  </div>
                 )}
               </div>
             </div>
 
-            {/* Event Code */}
-            <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4 text-center">
-              <p className="text-emerald-600 text-sm font-medium mb-1">
+            {/* Event Code -- prominent card */}
+            <div
+              className="pq-card animate-scale-in"
+              style={{
+                padding: '2rem',
+                textAlign: 'center',
+                background: 'var(--color-primary-subtle)',
+                border: '2px solid var(--color-primary-light)',
+              }}
+            >
+              <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-primary)', marginBottom: '0.5rem' }}>
                 Event Code
               </p>
-              <p className="text-3xl font-mono font-bold text-emerald-700 tracking-widest">
+              <p
+                style={{
+                  fontFamily: 'var(--font-heading)',
+                  fontSize: '2.5rem',
+                  fontWeight: 800,
+                  color: 'var(--color-primary)',
+                  letterSpacing: '0.2em',
+                  lineHeight: 1.2,
+                }}
+              >
                 {eventCode}
               </p>
-              <p className="text-emerald-600 text-xs mt-1">
+              <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginTop: '0.5rem' }}>
                 Participants and spectators use this to join
               </p>
             </div>
 
             {/* Participant Codes */}
-            <div className="rounded-xl bg-white border border-stone-200 p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-stone-800">Access Codes</h3>
+            <div className="pq-card" style={{ padding: '1.5rem 2rem' }}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, color: 'var(--color-text)', fontSize: '1rem' }}>
+                  Access Codes
+                </h3>
                 <button
                   onClick={copyAllCodes}
-                  className="text-emerald-700 text-sm font-medium hover:underline"
+                  className="pq-btn pq-btn-ghost"
+                  style={{
+                    fontFamily: 'var(--font-body)',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    color: copiedKey === 'allCodes' ? 'var(--color-success)' : 'var(--color-primary)',
+                  }}
                 >
                   {copiedKey === 'allCodes' ? '\u2713 Copied!' : 'Copy All'}
                 </button>
               </div>
-              <div className="max-h-60 overflow-y-auto space-y-1">
+              <div style={{ maxHeight: '280px', overflowY: 'auto' }}>
                 {generatedParticipants.map((p, i) => (
                   <div
                     key={i}
-                    className="flex items-center justify-between text-sm py-1"
+                    className="flex items-center justify-between py-2 px-2"
+                    style={{
+                      borderBottom: i < generatedParticipants.length - 1 ? '1px solid var(--color-border-light)' : 'none',
+                      borderRadius: 'var(--radius-sm)',
+                    }}
                   >
-                    <span className="text-stone-600 truncate mr-3">
+                    <span
+                      className="truncate mr-4"
+                      style={{
+                        fontFamily: 'var(--font-body)',
+                        fontSize: '0.875rem',
+                        color: p.isNamed ? 'var(--color-text)' : 'var(--color-text-muted)',
+                        fontStyle: p.isNamed ? 'normal' : 'italic',
+                      }}
+                    >
                       {p.name}
                     </span>
-                    <span className="font-mono text-stone-800 font-medium tracking-wide">
+                    <span
+                      style={{
+                        fontFamily: 'monospace',
+                        fontSize: '0.875rem',
+                        fontWeight: 600,
+                        color: 'var(--color-text)',
+                        letterSpacing: '0.1em',
+                        flexShrink: 0,
+                      }}
+                    >
                       {p.accessCode}
                     </span>
                   </div>
@@ -886,53 +1184,95 @@ export default function CreateEvent() {
 
         {/* Launched state */}
         {launched && (
-          <div className="space-y-5">
-            <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-6 space-y-3 text-center">
-              <p className="text-4xl">🎉</p>
-              <h2 className="text-2xl font-bold text-emerald-700">
+          <div className="animate-fade-in flex flex-col gap-5">
+            {/* Celebration card */}
+            <div
+              className="pq-card animate-scale-in"
+              style={{
+                padding: '2.5rem 2rem',
+                textAlign: 'center',
+                background: 'var(--color-primary-subtle)',
+                border: '2px solid var(--color-primary-light)',
+              }}
+            >
+              <h2
+                style={{
+                  fontFamily: 'var(--font-heading)',
+                  fontSize: '2rem',
+                  fontWeight: 800,
+                  color: 'var(--color-primary)',
+                  marginBottom: '0.5rem',
+                }}
+              >
                 Event Created!
               </h2>
-              <p className="text-emerald-600">
+              <p style={{ fontFamily: 'var(--font-body)', fontSize: '1rem', color: 'var(--color-text-secondary)', marginBottom: '1rem' }}>
                 {eventName} is ready to go.
               </p>
-              <p className="text-3xl font-mono font-bold text-emerald-700 tracking-widest mt-2">
+              <p
+                style={{
+                  fontFamily: 'var(--font-heading)',
+                  fontSize: '2.5rem',
+                  fontWeight: 800,
+                  color: 'var(--color-primary)',
+                  letterSpacing: '0.2em',
+                  lineHeight: 1.2,
+                }}
+              >
                 {eventCode}
               </p>
             </div>
 
-            {/* Next steps checklist */}
-            <div className="rounded-xl bg-white border border-stone-200 p-5">
-              <h3 className="font-semibold text-stone-800 mb-3">Next steps</h3>
-              <div className="space-y-3 text-sm">
-                <div className="flex items-start gap-3">
-                  <span className="text-emerald-600 mt-0.5">&#9745;</span>
-                  <p className="text-stone-600"><span className="font-medium text-stone-800">Share the invite link</span> — from the event page, copy the link or QR code and send it to your guests</p>
-                </div>
-                <div className="flex items-start gap-3">
-                  <span className="text-stone-300 mt-0.5">&#9744;</span>
-                  <p className="text-stone-600"><span className="font-medium text-stone-800">Or hand out access codes</span> — if you added names, each person has a unique code on the event page</p>
-                </div>
-                <div className="flex items-start gap-3">
-                  <span className="text-stone-300 mt-0.5">&#9744;</span>
-                  <p className="text-stone-600"><span className="font-medium text-stone-800">Check the mission assignments</span> — use the Missions tab on the event page to preview what each guest got</p>
-                </div>
-                <div className="flex items-start gap-3">
-                  <span className="text-stone-300 mt-0.5">&#9744;</span>
-                  <p className="text-stone-600"><span className="font-medium text-stone-800">Watch it unfold</span> — on event day, open the event page to see the leaderboard and feed update in real time</p>
-                </div>
+            {/* Next steps */}
+            <div className="pq-card" style={{ padding: '1.75rem 2rem' }}>
+              <h3 style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, color: 'var(--color-text)', marginBottom: '1rem', fontSize: '1.125rem' }}>
+                Next steps
+              </h3>
+              <div className="flex flex-col gap-4">
+                {[
+                  { done: true, title: 'Share the invite link', desc: 'from the event page, copy the link or QR code and send it to your guests' },
+                  { done: false, title: 'Or hand out access codes', desc: 'if you added names, each person has a unique code on the event page' },
+                  { done: false, title: 'Check the mission assignments', desc: 'use the Missions tab on the event page to preview what each guest got' },
+                  { done: false, title: 'Watch it unfold', desc: 'on event day, open the event page to see the leaderboard and feed update in real time' },
+                ].map((item, i) => (
+                  <div key={i} className="flex items-start gap-3">
+                    <div
+                      className="flex items-center justify-center flex-shrink-0"
+                      style={{
+                        width: '22px',
+                        height: '22px',
+                        borderRadius: 'var(--radius-sm)',
+                        marginTop: '1px',
+                        background: item.done ? 'var(--color-success-light)' : 'var(--color-surface)',
+                        border: item.done ? '1px solid var(--color-success)' : '1px solid var(--color-border)',
+                        color: item.done ? 'var(--color-success)' : 'var(--color-text-muted)',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                      }}
+                    >
+                      {item.done ? '\u2713' : ''}
+                    </div>
+                    <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+                      <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>{item.title}</span>
+                      {' -- '}{item.desc}
+                    </p>
+                  </div>
+                ))}
               </div>
             </div>
 
             <button
               onClick={() => navigate(`/organizer/event/${createdEventId}`)}
-              className="w-full py-3 rounded-xl bg-emerald-700 text-white font-semibold text-lg hover:bg-emerald-800 active:bg-emerald-900 transition-colors"
+              className="pq-btn pq-btn-primary w-full"
+              style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: '1.125rem', padding: '0.875rem 1.5rem' }}
             >
               Go to Event Page
             </button>
 
             <button
               onClick={() => navigate('/organizer')}
-              className="w-full py-3 rounded-xl border border-stone-300 text-stone-600 font-semibold hover:bg-stone-200 transition-colors"
+              className="pq-btn pq-btn-secondary w-full"
+              style={{ fontFamily: 'var(--font-body)', fontWeight: 600, fontSize: '1rem', padding: '0.875rem 1.5rem' }}
             >
               Back to Dashboard
             </button>
@@ -941,23 +1281,44 @@ export default function CreateEvent() {
 
         {/* Error */}
         {error && (
-          <p className="text-red-600 text-sm mt-4">{error}</p>
+          <div
+            className="mt-5 animate-fade-in"
+            style={{
+              padding: '0.75rem 1rem',
+              borderRadius: 'var(--radius-md)',
+              background: 'var(--color-danger-light)',
+              border: '1px solid var(--color-danger)',
+            }}
+          >
+            <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', color: 'var(--color-danger)' }}>
+              {error}
+            </p>
+          </div>
         )}
 
         {/* Helper note for edit mode */}
         {isEditMode && !launched && (
-          <p className="text-stone-400 text-xs text-center mt-4">
+          <p
+            className="mt-5"
+            style={{
+              fontFamily: 'var(--font-body)',
+              fontSize: '0.75rem',
+              color: 'var(--color-text-muted)',
+              textAlign: 'center',
+            }}
+          >
             You can edit this event at any time before it goes live.
           </p>
         )}
 
         {/* Navigation buttons */}
         {!launched && (
-          <div className="mt-8 space-y-3">
+          <div className="mt-8">
             {step < 4 ? (
               <button
                 onClick={nextStep}
-                className="w-full py-3 rounded-xl bg-emerald-700 text-white font-semibold text-lg hover:bg-emerald-800 active:bg-emerald-900 transition-colors"
+                className="pq-btn pq-btn-primary w-full"
+                style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: '1.125rem', padding: '0.875rem 1.5rem' }}
               >
                 Continue
               </button>
@@ -965,7 +1326,15 @@ export default function CreateEvent() {
               <button
                 onClick={handleLaunch}
                 disabled={launching}
-                className="w-full py-3 rounded-xl bg-emerald-700 text-white font-semibold text-lg hover:bg-emerald-800 active:bg-emerald-900 transition-colors disabled:opacity-50"
+                className="pq-btn pq-btn-primary w-full"
+                style={{
+                  fontFamily: 'var(--font-heading)',
+                  fontWeight: 700,
+                  fontSize: '1.125rem',
+                  padding: '0.875rem 1.5rem',
+                  opacity: launching ? 0.6 : 1,
+                  cursor: launching ? 'not-allowed' : 'pointer',
+                }}
               >
                 {launching
                   ? isEditMode ? 'Saving...' : 'Creating...'
@@ -978,8 +1347,8 @@ export default function CreateEvent() {
 
       {/* Copy toast */}
       {copyToast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-slide-down">
-          <div className="bg-stone-800 text-white px-5 py-2.5 rounded-xl shadow-lg text-sm font-medium">
+        <div className="pq-toast animate-slide-up">
+          <div className="pq-toast-inner" style={{ fontFamily: 'var(--font-body)' }}>
             {copyToast}
           </div>
         </div>

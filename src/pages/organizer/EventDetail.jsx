@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase.js'
 import { useAuth } from '../../hooks/useAuth.js'
+import { getAvatarColor, getInitials } from '../../lib/avatar.js'
 import Leaderboard from '../../components/Leaderboard.jsx'
 import ActivityFeed from '../../components/ActivityFeed.jsx'
 
@@ -537,33 +538,40 @@ export default function EventDetail() {
 
   const canSave = hasUnsavedChanges && emptySlots === 0
 
+  // --- Auth loading state ---
   if (authLoading || (!user && !authLoading)) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-stone-100">
-        <div className="text-center space-y-3">
-          <div className="w-8 h-8 border-3 border-emerald-700 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-stone-500">Loading...</p>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--color-bg)' }}>
+        <div className="flex flex-col items-center gap-3">
+          <div className="pq-spinner" />
+          <p style={{ color: 'var(--color-text-muted)', fontFamily: 'var(--font-body)' }}>Loading...</p>
         </div>
       </div>
     )
   }
 
+  // --- Data loading state ---
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-stone-100">
-        <p className="text-stone-500">Loading event...</p>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--color-bg)' }}>
+        <div className="flex flex-col items-center gap-3">
+          <div className="pq-spinner" />
+          <p style={{ color: 'var(--color-text-muted)', fontFamily: 'var(--font-body)' }}>Loading event...</p>
+        </div>
       </div>
     )
   }
 
+  // --- Error state (no event) ---
   if (error && !event) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-stone-100 px-4">
-        <div className="text-center space-y-4">
-          <p className="text-red-600">{error}</p>
+      <div className="min-h-screen flex items-center justify-center px-4" style={{ background: 'var(--color-bg)' }}>
+        <div className="flex flex-col items-center gap-4 animate-fade-in">
+          <p style={{ color: 'var(--color-danger)', fontFamily: 'var(--font-body)' }}>{error}</p>
           <button
             onClick={() => navigate('/organizer')}
-            className="text-emerald-700 font-medium hover:underline"
+            className="pq-btn pq-btn-ghost"
+            style={{ color: 'var(--color-primary)' }}
           >
             Back to dashboard
           </button>
@@ -593,34 +601,55 @@ export default function EventDetail() {
 
   const inviteLink = `${window.location.origin}/register/${event.event_code}`
 
+  const tabItems = [
+    { key: 'participants', label: 'Participants' },
+    { key: 'missions', label: 'Missions' },
+    { key: 'feed', label: 'Feed' },
+  ]
+
   return (
-    <div className="min-h-screen bg-stone-100">
-      <div className={`${activeTab === 'missions' ? 'max-w-5xl' : 'max-w-2xl'} mx-auto px-4 py-6 transition-all`}>
-        {/* Header */}
+    <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
+      <div className={`${activeTab === 'missions' ? 'max-w-5xl' : 'max-w-3xl'} mx-auto px-6 py-8`} style={{ transition: 'var(--transition-base)' }}>
+
+        {/* Back nav */}
         <button
           onClick={() => navigate('/organizer')}
-          className="text-stone-400 text-sm hover:text-stone-600 transition-colors mb-4"
+          className="pq-btn pq-btn-ghost mb-6"
+          style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', padding: '0.25rem 0' }}
         >
           &larr; Dashboard
         </button>
 
-        <div className="flex items-start justify-between mb-6">
+        {/* Event Header */}
+        <div className="flex items-start justify-between mb-8 animate-fade-in">
           <div>
-            <h1 className="text-2xl font-bold text-stone-800">{event.name}</h1>
-            <div className="flex items-center gap-2 mt-1">
+            <h1
+              className="mb-2"
+              style={{
+                fontFamily: 'var(--font-heading)',
+                fontSize: '1.75rem',
+                fontWeight: 700,
+                color: 'var(--color-text)',
+                lineHeight: 1.2,
+              }}
+            >
+              {event.name}
+            </h1>
+            <div className="flex items-center gap-3">
               {isLive && (
-                <span className="inline-flex items-center gap-1.5 text-emerald-600 text-sm font-medium">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="pq-badge pq-badge-success flex items-center gap-1.5">
+                  <span
+                    className="inline-block w-2 h-2 rounded-full animate-pulse"
+                    style={{ background: 'var(--color-success)' }}
+                  />
                   Live
                 </span>
               )}
               {isUpcoming && (
-                <span className="text-amber-600 text-sm font-medium">
-                  Upcoming
-                </span>
+                <span className="pq-badge pq-badge-warning">Upcoming</span>
               )}
               {isEnded && (
-                <span className="text-stone-400 text-sm font-medium">
+                <span className="pq-badge pq-badge-muted">
                   Ended &middot;{' '}
                   {new Date(event.start_time).toLocaleDateString('en-US', {
                     month: 'short',
@@ -629,8 +658,8 @@ export default function EventDetail() {
                   })}
                 </span>
               )}
-              {!isEnded && (
-                <span className="text-stone-400 text-sm">
+              {!isEnded && timeRemaining && (
+                <span style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', fontFamily: 'var(--font-body)' }}>
                   {timeRemaining}
                 </span>
               )}
@@ -641,7 +670,7 @@ export default function EventDetail() {
             {!isEnded && (
               <button
                 onClick={() => navigate(`/organizer/new?edit=${id}`)}
-                className="px-4 py-2 rounded-xl border border-stone-300 text-stone-600 text-sm font-medium hover:bg-stone-50 transition-colors"
+                className="pq-btn pq-btn-secondary"
               >
                 Edit
               </button>
@@ -650,7 +679,7 @@ export default function EventDetail() {
               <button
                 onClick={handleEndEvent}
                 disabled={ending}
-                className="px-4 py-2 rounded-xl border border-red-300 text-red-600 text-sm font-medium hover:bg-red-50 transition-colors disabled:opacity-50"
+                className="pq-btn pq-btn-danger"
               >
                 {ending ? 'Ending...' : 'End Event'}
               </button>
@@ -658,72 +687,101 @@ export default function EventDetail() {
           </div>
         </div>
 
-        {/* Helper note */}
-        {!isEnded && (
-          <p className="text-stone-400 text-xs mb-4">
-            You can edit this event at any time before it goes live.
-          </p>
-        )}
-
-        {/* Event code + Invite link */}
-        <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4 mb-6">
-          <div className="flex items-center justify-between mb-3">
+        {/* Event Code + Invite */}
+        <div
+          className="pq-card mb-6 animate-slide-up"
+          style={{
+            background: 'var(--color-primary-subtle)',
+            borderColor: 'var(--color-primary-light)',
+          }}
+        >
+          <div className="flex items-center justify-between mb-4">
             <div>
-              <p className="text-emerald-600 text-xs font-medium">Event Code</p>
-              <p className="text-xl font-mono font-bold text-emerald-700 tracking-widest">
+              <p style={{ color: 'var(--color-primary)', fontSize: '0.75rem', fontWeight: 600, fontFamily: 'var(--font-body)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Event Code
+              </p>
+              <p style={{
+                fontFamily: 'var(--font-heading)',
+                fontSize: '1.75rem',
+                fontWeight: 800,
+                color: 'var(--color-primary)',
+                letterSpacing: '0.15em',
+              }}>
                 {event.event_code}
               </p>
             </div>
             <button
               onClick={() => copyWithToast(event.event_code, 'Event code copied!', 'eventCode')}
-              className="text-emerald-700 text-sm font-medium hover:underline"
+              className="pq-btn pq-btn-ghost"
+              style={{ color: 'var(--color-primary)' }}
             >
-              {copiedKey === 'eventCode' ? '\u2713 Copied!' : 'Copy'}
+              {copiedKey === 'eventCode' ? 'Copied!' : 'Copy Code'}
             </button>
           </div>
 
           {/* Invite link section */}
           {!isEnded && (
-            <div className="border-t border-emerald-200 pt-3">
-              <p className="text-emerald-600 text-xs font-medium mb-1">Invite Link</p>
-              <div className="flex items-center gap-2">
-                <p className="text-emerald-700 text-sm font-mono truncate flex-1">
+            <div className="pt-4" style={{ borderTop: '1px solid var(--color-primary-light)' }}>
+              <p style={{ color: 'var(--color-primary)', fontSize: '0.75rem', fontWeight: 600, fontFamily: 'var(--font-body)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>
+                Invite Link
+              </p>
+              <div className="flex items-center gap-3">
+                <p
+                  className="flex-1 truncate"
+                  style={{
+                    fontFamily: 'monospace',
+                    fontSize: '0.875rem',
+                    color: 'var(--color-primary)',
+                    background: 'var(--color-surface)',
+                    padding: '0.5rem 0.75rem',
+                    borderRadius: 'var(--radius-md)',
+                  }}
+                >
                   {inviteLink}
                 </p>
                 <button
                   onClick={() => copyWithToast(inviteLink, 'Invite link copied!', 'inviteLink')}
-                  className="text-emerald-700 text-xs font-medium hover:underline shrink-0"
+                  className="pq-btn pq-btn-ghost shrink-0"
+                  style={{ color: 'var(--color-primary)', fontSize: '0.8125rem' }}
                 >
-                  {copiedKey === 'inviteLink' ? '\u2713 Copied!' : 'Copy Link'}
+                  {copiedKey === 'inviteLink' ? 'Copied!' : 'Copy Link'}
                 </button>
                 <button
                   onClick={() => setShowQR(!showQR)}
-                  className="text-emerald-700 text-xs font-medium hover:underline shrink-0"
+                  className="pq-btn pq-btn-ghost shrink-0"
+                  style={{ color: 'var(--color-primary)', fontSize: '0.8125rem' }}
                 >
                   {showQR ? 'Hide QR' : 'QR Code'}
                 </button>
               </div>
               {showQR && (
-                <div className="mt-3 p-4 bg-white rounded-lg text-center">
+                <div
+                  className="mt-4 p-6 flex flex-col items-center animate-scale-in"
+                  style={{
+                    background: 'var(--color-surface)',
+                    borderRadius: 'var(--radius-lg)',
+                  }}
+                >
                   <img
                     src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(inviteLink)}`}
                     alt="QR Code"
-                    className="mx-auto"
                     width={200}
                     height={200}
                   />
-                  <p className="text-stone-400 text-xs mt-2">Scan to register</p>
+                  <p className="mt-3" style={{ color: 'var(--color-text-muted)', fontSize: '0.8125rem', fontFamily: 'var(--font-body)' }}>
+                    Scan to register
+                  </p>
                 </div>
               )}
             </div>
           )}
         </div>
 
-        {/* Play as Participant button */}
+        {/* Play as Participant */}
         {organizerAccessCode && (
           <button
             onClick={() => navigate(`/play/${organizerAccessCode}`)}
-            className="w-full py-2 rounded-xl border border-emerald-300 text-emerald-700 text-sm font-medium hover:bg-emerald-50 transition-colors mb-6"
+            className="pq-btn pq-btn-secondary w-full mb-6"
           >
             Play as Participant
           </button>
@@ -731,38 +789,53 @@ export default function EventDetail() {
 
         {/* Post-event summary */}
         {isEnded && (
-          <div className="rounded-xl bg-white border border-stone-200 p-4 mb-6">
-            <h3 className="font-semibold text-stone-800 mb-3">Event Summary</h3>
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <p className="text-stone-400">Total completions</p>
-                <p className="text-stone-800 font-semibold text-lg">
-                  {totalCompletions}
-                </p>
-              </div>
-              <div>
-                <p className="text-stone-400">Avg per person</p>
-                <p className="text-stone-800 font-semibold text-lg">
-                  {avgCompletions}
-                </p>
-              </div>
-              <div>
-                <p className="text-stone-400">Participation rate</p>
-                <p className="text-stone-800 font-semibold text-lg">
-                  {participationRate}%
-                </p>
-              </div>
-              <div>
-                <p className="text-stone-400">Participants joined</p>
-                <p className="text-stone-800 font-semibold text-lg">
-                  {joinedCount} / {activeParticipants.length}
-                </p>
-              </div>
+          <div className="pq-card mb-6 animate-fade-in">
+            <h3
+              className="mb-4"
+              style={{
+                fontFamily: 'var(--font-heading)',
+                fontSize: '1.125rem',
+                fontWeight: 700,
+                color: 'var(--color-text)',
+              }}
+            >
+              Event Summary
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              {[
+                { label: 'Total completions', value: totalCompletions },
+                { label: 'Avg per person', value: avgCompletions },
+                { label: 'Participation rate', value: `${participationRate}%` },
+                { label: 'Participants joined', value: `${joinedCount} / ${activeParticipants.length}` },
+              ].map((stat) => (
+                <div
+                  key={stat.label}
+                  className="p-4"
+                  style={{
+                    background: 'var(--color-surface)',
+                    borderRadius: 'var(--radius-md)',
+                  }}
+                >
+                  <p style={{ color: 'var(--color-text-muted)', fontSize: '0.8125rem', fontFamily: 'var(--font-body)', marginBottom: '0.25rem' }}>
+                    {stat.label}
+                  </p>
+                  <p style={{
+                    fontFamily: 'var(--font-heading)',
+                    fontSize: '1.5rem',
+                    fontWeight: 700,
+                    color: 'var(--color-text)',
+                  }}>
+                    {stat.value}
+                  </p>
+                </div>
+              ))}
             </div>
             {mostCompletedMission && (
-              <div className="mt-4 pt-3 border-t border-stone-100">
-                <p className="text-stone-400 text-sm">Most completed mission</p>
-                <p className="text-stone-700 text-sm mt-0.5">
+              <div className="mt-4 pt-4" style={{ borderTop: '1px solid var(--color-border-light)' }}>
+                <p style={{ color: 'var(--color-text-muted)', fontSize: '0.8125rem', fontFamily: 'var(--font-body)' }}>
+                  Most completed mission
+                </p>
+                <p className="mt-1" style={{ color: 'var(--color-text-secondary)', fontSize: '0.875rem', fontFamily: 'var(--font-body)' }}>
                   "{mostCompletedMission.text}" ({mostCompletedMission.count} completions)
                 </p>
               </div>
@@ -775,40 +848,61 @@ export default function EventDetail() {
           <div className="mb-6">
             <button
               onClick={() => setShowLeaderboard(!showLeaderboard)}
-              className="text-emerald-700 text-sm font-medium hover:underline mb-3"
+              className="pq-btn pq-btn-ghost mb-3"
+              style={{ color: 'var(--color-primary)', fontSize: '0.875rem' }}
             >
               {showLeaderboard ? 'Hide Leaderboard' : 'Show Leaderboard'}
             </button>
             {showLeaderboard && (
-              <div className="rounded-xl bg-white border border-stone-200 p-4">
+              <div className="pq-card animate-scale-in">
                 <Leaderboard eventId={event.id} anonymity={event.anonymity_enabled} />
               </div>
             )}
           </div>
         )}
 
-        {/* Tabs: Participants | Missions | Feed */}
-        <div className="flex border-b border-stone-200 mb-4">
-          {['participants', 'missions', 'feed'].map((tab) => (
+        {/* Tabs */}
+        <div
+          className="flex mb-6"
+          style={{ borderBottom: '2px solid var(--color-border-light)' }}
+        >
+          {tabItems.map((tab) => (
             <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`flex-1 py-2 text-center text-sm font-medium transition-colors ${
-                activeTab === tab
-                  ? 'text-emerald-700 border-b-2 border-emerald-700'
-                  : 'text-stone-400 hover:text-stone-600'
-              }`}
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className="flex-1 py-3 text-center"
+              style={{
+                fontFamily: 'var(--font-heading)',
+                fontSize: '0.875rem',
+                fontWeight: 600,
+                color: activeTab === tab.key ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                borderBottom: activeTab === tab.key ? '2px solid var(--color-primary)' : '2px solid transparent',
+                marginBottom: '-2px',
+                background: 'transparent',
+                cursor: 'pointer',
+                transition: 'var(--transition-fast)',
+              }}
             >
-              {tab === 'participants' ? 'Participants' : tab === 'missions' ? 'Missions' : 'Feed'}
+              {tab.label}
             </button>
           ))}
         </div>
 
         {/* Participants tab */}
         {activeTab === 'participants' && (
-          <div className="rounded-xl bg-white border border-stone-200 overflow-hidden mb-6">
-            <div className="px-4 py-3 border-b border-stone-100 flex items-center justify-between">
-              <h3 className="font-semibold text-stone-800">
+          <div className="pq-card mb-6 animate-fade-in" style={{ padding: 0, overflow: 'hidden' }}>
+            <div
+              className="px-5 py-4 flex items-center justify-between"
+              style={{ borderBottom: '1px solid var(--color-border-light)' }}
+            >
+              <h3
+                style={{
+                  fontFamily: 'var(--font-heading)',
+                  fontSize: '1rem',
+                  fontWeight: 700,
+                  color: 'var(--color-text)',
+                }}
+              >
                 Participants ({activeParticipants.length})
               </h3>
               {activeParticipants.length > 0 && (
@@ -822,61 +916,115 @@ export default function EventDetail() {
                       'All codes copied!'
                     )
                   }}
-                  className="text-emerald-700 text-xs font-medium hover:underline"
+                  className="pq-btn pq-btn-ghost"
+                  style={{ color: 'var(--color-primary)', fontSize: '0.8125rem' }}
                 >
-                  Copy All
+                  Copy All Codes
                 </button>
               )}
             </div>
 
             {activeParticipants.length === 0 ? (
-              <p className="text-stone-400 text-sm px-4 py-6 text-center">
+              <p
+                className="px-5 py-8 text-center"
+                style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', fontFamily: 'var(--font-body)' }}
+              >
                 No participants yet.
               </p>
             ) : (
-              <div className="divide-y divide-stone-100">
+              <div>
                 {/* Table header */}
-                <div className="grid grid-cols-12 px-4 py-2 text-xs text-stone-400 font-medium uppercase tracking-wider">
-                  <div className="col-span-3">Name</div>
+                <div
+                  className="grid grid-cols-12 px-5 py-2.5 items-center"
+                  style={{
+                    fontSize: '0.6875rem',
+                    fontWeight: 600,
+                    color: 'var(--color-text-muted)',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
+                    fontFamily: 'var(--font-body)',
+                    background: 'var(--color-surface)',
+                  }}
+                >
+                  <div className="col-span-4">Name</div>
                   <div className="col-span-3">Access Code</div>
-                  <div className="col-span-1 text-center">Src</div>
-                  <div className="col-span-2 text-center">Joined</div>
-                  <div className="col-span-2 text-right">Done</div>
-                  <div className="col-span-1"></div>
+                  <div className="col-span-1 text-center">Source</div>
+                  <div className="col-span-1 text-center">Joined</div>
+                  <div className="col-span-2 text-right">Progress</div>
+                  <div className="col-span-1" />
                 </div>
 
                 {activeParticipants.map((p) => (
                   <div
                     key={p.id}
-                    className="grid grid-cols-12 px-4 py-3 items-center text-sm"
+                    className="grid grid-cols-12 px-5 py-3 items-center"
+                    style={{
+                      borderBottom: '1px solid var(--color-border-light)',
+                      transition: 'var(--transition-fast)',
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = 'var(--color-surface-hover)'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                   >
-                    <div className="col-span-3 text-stone-800 truncate">
-                      {p.name}
+                    <div className="col-span-4 flex items-center gap-3">
+                      <div
+                        className="pq-avatar pq-avatar-sm"
+                        style={{ background: getAvatarColor(p.name) }}
+                      >
+                        {getInitials(p.name)}
+                      </div>
+                      <span
+                        className="truncate"
+                        style={{
+                          color: 'var(--color-text)',
+                          fontSize: '0.875rem',
+                          fontWeight: 500,
+                          fontFamily: 'var(--font-body)',
+                        }}
+                      >
+                        {p.name}
+                      </span>
                     </div>
-                    <div className="col-span-3 font-mono text-stone-500 text-xs tracking-wide">
-                      {p.access_code}
+                    <div className="col-span-3">
+                      <span
+                        style={{
+                          fontFamily: 'monospace',
+                          fontSize: '0.8125rem',
+                          color: 'var(--color-text-secondary)',
+                          letterSpacing: '0.05em',
+                        }}
+                      >
+                        {p.access_code}
+                      </span>
                     </div>
                     <div className="col-span-1 text-center">
-                      <span className={`text-xs ${p.source === 'self' ? 'text-blue-500' : 'text-stone-300'}`}>
+                      <span className={`pq-badge ${p.source === 'self' ? 'pq-badge-primary' : 'pq-badge-muted'}`}>
                         {p.source === 'self' ? 'link' : 'add'}
                       </span>
                     </div>
-                    <div className="col-span-2 text-center">
+                    <div className="col-span-1 text-center">
                       {p.joined_at ? (
-                        <span className="text-emerald-600 font-medium">Yes</span>
+                        <span className="pq-badge pq-badge-success">Yes</span>
                       ) : (
-                        <span className="text-stone-300">&mdash;</span>
+                        <span style={{ color: 'var(--color-text-muted)' }}>&mdash;</span>
                       )}
                     </div>
-                    <div className="col-span-2 text-right text-stone-600">
+                    <div className="col-span-2 text-right" style={{ color: 'var(--color-text-secondary)', fontSize: '0.875rem', fontFamily: 'var(--font-body)' }}>
                       {p.completed} / {p.total}
                     </div>
                     <div className="col-span-1 text-right">
                       {!isEnded && (
                         <button
                           onClick={() => handleDeactivateParticipant(p.id)}
-                          className="text-stone-300 hover:text-red-500 text-xs"
+                          className="pq-btn pq-btn-ghost"
+                          style={{
+                            color: 'var(--color-text-muted)',
+                            padding: '0.125rem 0.375rem',
+                            fontSize: '1rem',
+                            lineHeight: 1,
+                          }}
                           title="Remove participant"
+                          onMouseEnter={(e) => e.currentTarget.style.color = 'var(--color-danger)'}
+                          onMouseLeave={(e) => e.currentTarget.style.color = 'var(--color-text-muted)'}
                         >
                           &times;
                         </button>
@@ -889,14 +1037,14 @@ export default function EventDetail() {
 
             {/* Add participant inline */}
             {!isEnded && (
-              <div className="px-4 py-3 border-t border-stone-100">
-                <div className="flex items-center gap-2">
+              <div className="px-5 py-4" style={{ borderTop: '1px solid var(--color-border-light)' }}>
+                <div className="flex items-center gap-3">
                   <input
                     type="text"
                     value={newParticipantName}
                     onChange={(e) => setNewParticipantName(e.target.value)}
                     placeholder="Add participant name..."
-                    className="flex-1 px-3 py-2 rounded-lg border border-stone-300 bg-white text-stone-800 text-sm placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-transparent"
+                    className="pq-input flex-1"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') handleAddParticipant()
                     }}
@@ -904,46 +1052,59 @@ export default function EventDetail() {
                   <button
                     onClick={handleAddParticipant}
                     disabled={addingParticipant || !newParticipantName.trim()}
-                    className="px-4 py-2 rounded-lg bg-emerald-700 text-white text-sm font-medium hover:bg-emerald-800 transition-colors disabled:opacity-50"
+                    className="pq-btn pq-btn-primary"
                   >
                     {addingParticipant ? '...' : 'Add'}
                   </button>
                 </div>
-                <p className="text-stone-400 text-xs mt-2">
-                  Or share the <button onClick={() => { setActiveTab('participants'); copyWithToast(inviteLink, 'Invite link copied!', 'inviteLinkInline') }} className="text-emerald-700 font-medium hover:underline">{copiedKey === 'inviteLinkInline' ? '\u2713 Copied!' : 'invite link'}</button> and let participants register themselves.
+                <p className="mt-2" style={{ color: 'var(--color-text-muted)', fontSize: '0.8125rem', fontFamily: 'var(--font-body)' }}>
+                  Or share the{' '}
+                  <button
+                    onClick={() => { setActiveTab('participants'); copyWithToast(inviteLink, 'Invite link copied!', 'inviteLinkInline') }}
+                    className="pq-btn pq-btn-ghost"
+                    style={{ color: 'var(--color-primary)', fontWeight: 600, padding: 0, display: 'inline', fontSize: 'inherit' }}
+                  >
+                    {copiedKey === 'inviteLinkInline' ? 'Copied!' : 'invite link'}
+                  </button>{' '}
+                  and let participants register themselves.
                 </p>
               </div>
             )}
           </div>
         )}
 
-        {/* Missions tab — Assignment View with Pool Sidebar */}
+        {/* Missions tab */}
         {activeTab === 'missions' && (
-          <div className="mb-6">
+          <div className="mb-6 animate-fade-in">
             {/* Save bar */}
             {hasUnsavedChanges && !isEnded && (
-              <div className="mb-4 p-3 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-between">
+              <div
+                className="pq-card mb-4 flex items-center justify-between"
+                style={{
+                  background: 'var(--color-warning-light)',
+                  borderColor: 'var(--color-warning)',
+                }}
+              >
                 <div>
-                  <span className="text-amber-800 text-sm font-medium">Unsaved changes</span>
+                  <span style={{ color: 'var(--color-text)', fontSize: '0.875rem', fontWeight: 600, fontFamily: 'var(--font-body)' }}>
+                    Unsaved changes
+                  </span>
                   {emptySlots > 0 && (
-                    <span className="text-amber-600 text-xs ml-2">
-                      ({emptySlots} empty {emptySlots === 1 ? 'slot' : 'slots'} — fill before saving)
+                    <span className="ml-2" style={{ color: 'var(--color-text-secondary)', fontSize: '0.8125rem', fontFamily: 'var(--font-body)' }}>
+                      ({emptySlots} empty {emptySlots === 1 ? 'slot' : 'slots'} -- fill before saving)
                     </span>
                   )}
                 </div>
                 <div className="flex gap-2">
-                  <button
-                    onClick={handleCancelEdits}
-                    className="px-3 py-1.5 rounded-lg text-stone-600 text-sm font-medium hover:bg-stone-100 transition-colors"
-                  >
+                  <button onClick={handleCancelEdits} className="pq-btn pq-btn-ghost">
                     Cancel
                   </button>
                   <button
                     onClick={handleSaveAssignments}
                     disabled={!canSave || saving}
-                    className="px-4 py-1.5 rounded-lg bg-emerald-700 text-white text-sm font-medium hover:bg-emerald-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="pq-btn pq-btn-primary"
                   >
-                    {saving ? 'Saving...' : 'Save'}
+                    {saving ? 'Saving...' : 'Save Changes'}
                   </button>
                 </div>
               </div>
@@ -951,100 +1112,151 @@ export default function EventDetail() {
 
             {/* Select mode banner */}
             {selectTarget && (
-              <div className="mb-4 p-3 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-between">
-                <span className="text-blue-800 text-sm font-medium">
+              <div
+                className="pq-card mb-4 flex items-center justify-between"
+                style={{
+                  background: 'var(--color-primary-subtle)',
+                  borderColor: 'var(--color-primary-light)',
+                }}
+              >
+                <span style={{ color: 'var(--color-primary)', fontSize: '0.875rem', fontWeight: 600, fontFamily: 'var(--font-body)' }}>
                   Select a mission from the pool to assign
                 </span>
                 <button
                   onClick={() => setSelectTarget(null)}
-                  className="text-blue-600 text-sm font-medium hover:underline"
+                  className="pq-btn pq-btn-ghost"
+                  style={{ color: 'var(--color-primary)' }}
                 >
                   Cancel
                 </button>
               </div>
             )}
 
-            <div className="flex flex-col lg:flex-row gap-4">
+            <div className="flex flex-col lg:flex-row gap-5">
               {/* Participant assignments */}
-              <div className="flex-1 min-w-0 space-y-4">
+              <div className="flex-1 min-w-0 flex flex-col gap-4">
                 {(!isEnded && !isLive && (localAssignments || missionAssignments).length === 0) && (
-                  <p className="text-stone-400 text-sm text-center py-6">
+                  <p
+                    className="text-center py-8"
+                    style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', fontFamily: 'var(--font-body)' }}
+                  >
                     Mission assignments will appear here after the event is created.
                   </p>
                 )}
                 {(localAssignments || missionAssignments).map((participant, pIdx) => (
-                  <div key={participant.id} className="rounded-xl bg-white border border-stone-200 overflow-hidden">
-                    <div className="px-4 py-3 border-b border-stone-100">
-                      <h4 className="font-semibold text-stone-800 text-sm">{participant.name}</h4>
+                  <div key={participant.id} className="pq-card" style={{ padding: 0, overflow: 'hidden' }}>
+                    <div
+                      className="px-4 py-3 flex items-center gap-3"
+                      style={{ borderBottom: '1px solid var(--color-border-light)' }}
+                    >
+                      <div
+                        className="pq-avatar pq-avatar-sm"
+                        style={{ background: getAvatarColor(participant.name) }}
+                      >
+                        {getInitials(participant.name)}
+                      </div>
+                      <h4
+                        style={{
+                          fontFamily: 'var(--font-heading)',
+                          fontSize: '0.9375rem',
+                          fontWeight: 700,
+                          color: 'var(--color-text)',
+                        }}
+                      >
+                        {participant.name}
+                      </h4>
                     </div>
-                    <div className="divide-y divide-stone-50">
-                      {participant.missions.map((pm, mIdx) => (
-                        <div
-                          key={pm?.id || mIdx}
-                          className={`px-4 py-2 flex items-center justify-between ${
-                            selectTarget?.participantIdx === pIdx && selectTarget?.missionIdx === mIdx
-                              ? 'bg-blue-50 border-l-2 border-blue-400'
-                              : ''
-                          }`}
-                        >
-                          {pm?.mission_id ? (
-                            <>
-                              <div className="flex-1 min-w-0">
-                                <p className={`text-sm truncate ${pm.completed ? 'text-emerald-600 line-through' : 'text-stone-700'}`}>
-                                  {pm.missions?.text || 'Unknown mission'}
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-2 ml-2">
-                                {pm.completed && (
-                                  <span className="text-emerald-500 text-xs font-medium">Done</span>
+                    <div>
+                      {participant.missions.map((pm, mIdx) => {
+                        const isSelected = selectTarget?.participantIdx === pIdx && selectTarget?.missionIdx === mIdx
+                        return (
+                          <div
+                            key={pm?.id || mIdx}
+                            className="px-4 py-2.5 flex items-center justify-between"
+                            style={{
+                              borderBottom: '1px solid var(--color-border-light)',
+                              background: isSelected ? 'var(--color-primary-subtle)' : 'transparent',
+                              borderLeft: isSelected ? '3px solid var(--color-primary)' : '3px solid transparent',
+                              transition: 'var(--transition-fast)',
+                            }}
+                          >
+                            {pm?.mission_id ? (
+                              <>
+                                <div className="flex-1 min-w-0">
+                                  <p
+                                    className="truncate"
+                                    style={{
+                                      fontSize: '0.875rem',
+                                      fontFamily: 'var(--font-body)',
+                                      color: pm.completed ? 'var(--color-success)' : 'var(--color-text-secondary)',
+                                      textDecoration: pm.completed ? 'line-through' : 'none',
+                                    }}
+                                  >
+                                    {pm.missions?.text || 'Unknown mission'}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-2 ml-3">
+                                  {pm.completed && (
+                                    <span className="pq-badge pq-badge-success">Done</span>
+                                  )}
+                                  {(isUpcoming || (isLive && !pm.completed)) && (
+                                    <>
+                                      <button
+                                        onClick={() => handleSelectForSwap(pIdx, mIdx)}
+                                        className="pq-btn pq-btn-ghost"
+                                        style={{
+                                          color: isSelected ? 'var(--color-primary)' : 'var(--color-primary)',
+                                          fontSize: '0.8125rem',
+                                          fontWeight: 600,
+                                          padding: '0.125rem 0.5rem',
+                                        }}
+                                      >
+                                        {isSelected ? 'Selecting...' : 'Swap'}
+                                      </button>
+                                      <button
+                                        onClick={() => handleUnassign(pIdx, mIdx)}
+                                        className="pq-btn pq-btn-ghost"
+                                        style={{
+                                          color: 'var(--color-danger)',
+                                          fontSize: '0.8125rem',
+                                          fontWeight: 600,
+                                          padding: '0.125rem 0.5rem',
+                                        }}
+                                      >
+                                        Unassign
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              </>
+                            ) : (
+                              <div className="flex-1 flex items-center justify-between">
+                                <span style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', fontStyle: 'italic', fontFamily: 'var(--font-body)' }}>
+                                  Empty slot
+                                </span>
+                                {(isUpcoming || isLive) && (
+                                  <button
+                                    onClick={() => handleSelectForSwap(pIdx, mIdx)}
+                                    className="pq-btn pq-btn-ghost"
+                                    style={{
+                                      color: isSelected ? 'var(--color-primary)' : 'var(--color-primary)',
+                                      fontSize: '0.8125rem',
+                                      fontWeight: 600,
+                                      padding: '0.125rem 0.5rem',
+                                    }}
+                                  >
+                                    {isSelected ? 'Selecting...' : 'Assign'}
+                                  </button>
                                 )}
-                                {(isUpcoming || (isLive && !pm.completed)) && (
-                                  <>
-                                    <button
-                                      onClick={() => handleSelectForSwap(pIdx, mIdx)}
-                                      className={`text-xs font-medium ${
-                                        selectTarget?.participantIdx === pIdx && selectTarget?.missionIdx === mIdx
-                                          ? 'text-blue-700'
-                                          : 'text-blue-600 hover:text-blue-700'
-                                      }`}
-                                    >
-                                      {selectTarget?.participantIdx === pIdx && selectTarget?.missionIdx === mIdx
-                                        ? 'Selecting...'
-                                        : 'Swap'}
-                                    </button>
-                                    <button
-                                      onClick={() => handleUnassign(pIdx, mIdx)}
-                                      className="text-red-500 hover:text-red-600 text-xs font-medium"
-                                    >
-                                      Unassign
-                                    </button>
-                                  </>
-                                )}
                               </div>
-                            </>
-                          ) : (
-                            <div className="flex-1 flex items-center justify-between">
-                              <span className="text-stone-400 text-sm italic">Empty slot</span>
-                              {(isUpcoming || isLive) && (
-                                <button
-                                  onClick={() => handleSelectForSwap(pIdx, mIdx)}
-                                  className={`text-xs font-medium ${
-                                    selectTarget?.participantIdx === pIdx && selectTarget?.missionIdx === mIdx
-                                      ? 'text-blue-700'
-                                      : 'text-emerald-600 hover:text-emerald-700'
-                                  }`}
-                                >
-                                  {selectTarget?.participantIdx === pIdx && selectTarget?.missionIdx === mIdx
-                                    ? 'Selecting...'
-                                    : 'Assign'}
-                                </button>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      ))}
+                            )}
+                          </div>
+                        )
+                      })}
                       {participant.missions.length === 0 && (
-                        <p className="text-stone-400 text-xs px-4 py-3">No missions assigned</p>
+                        <p className="px-4 py-4" style={{ color: 'var(--color-text-muted)', fontSize: '0.8125rem', fontFamily: 'var(--font-body)' }}>
+                          No missions assigned
+                        </p>
                       )}
                     </div>
                   </div>
@@ -1053,38 +1265,60 @@ export default function EventDetail() {
 
               {/* Mission Pool Sidebar */}
               <div className="w-full lg:w-80 shrink-0">
-                <div className="lg:sticky lg:top-4 rounded-xl bg-white border border-stone-200 overflow-hidden">
-                  <div className="px-4 py-3 border-b border-stone-100">
-                    <h3 className="font-semibold text-stone-800 text-sm">
+                <div className="lg:sticky lg:top-4 pq-card" style={{ padding: 0, overflow: 'hidden' }}>
+                  <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--color-border-light)' }}>
+                    <h3
+                      style={{
+                        fontFamily: 'var(--font-heading)',
+                        fontSize: '0.9375rem',
+                        fontWeight: 700,
+                        color: 'var(--color-text)',
+                      }}
+                    >
                       Mission Pool ({poolWithCounts.length})
                     </h3>
-                    <p className="text-stone-400 text-xs mt-0.5">
+                    <p className="mt-1" style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', fontFamily: 'var(--font-body)' }}>
                       Number shows how many players have each mission
                     </p>
                   </div>
-                  <div className="max-h-[70vh] overflow-y-auto divide-y divide-stone-50">
+                  <div className="max-h-[70vh] overflow-y-auto">
                     {poolWithCounts.map((mission) => (
                       <div
                         key={mission.id}
                         onClick={() => selectTarget && handlePoolMissionClick(mission)}
-                        className={`px-4 py-2.5 flex items-start justify-between gap-2 ${
-                          selectTarget
-                            ? 'cursor-pointer hover:bg-emerald-50 transition-colors'
-                            : ''
-                        }`}
+                        className="px-4 py-2.5 flex items-start justify-between gap-3"
+                        style={{
+                          borderBottom: '1px solid var(--color-border-light)',
+                          cursor: selectTarget ? 'pointer' : 'default',
+                          transition: 'var(--transition-fast)',
+                        }}
+                        onMouseEnter={(e) => {
+                          if (selectTarget) e.currentTarget.style.background = 'var(--color-primary-subtle)'
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'transparent'
+                        }}
                       >
-                        <p className="text-sm text-stone-700 flex-1">{mission.text}</p>
-                        <span className={`text-xs font-mono font-medium shrink-0 px-1.5 py-0.5 rounded ${
-                          mission.assignCount === 0
-                            ? 'bg-stone-100 text-stone-400'
-                            : 'bg-emerald-100 text-emerald-700'
-                        }`}>
+                        <p className="flex-1" style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', fontFamily: 'var(--font-body)' }}>
+                          {mission.text}
+                        </p>
+                        <span
+                          className="shrink-0 px-1.5 py-0.5"
+                          style={{
+                            fontFamily: 'monospace',
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                            borderRadius: 'var(--radius-sm)',
+                            background: mission.assignCount === 0 ? 'var(--color-surface)' : 'var(--color-success-light)',
+                            color: mission.assignCount === 0 ? 'var(--color-text-muted)' : 'var(--color-success)',
+                          }}
+                        >
                           {mission.assignCount}
                         </span>
                       </div>
                     ))}
                     {poolWithCounts.length === 0 && (
-                      <p className="text-stone-400 text-xs px-4 py-6 text-center">
+                      <p className="px-4 py-8 text-center" style={{ color: 'var(--color-text-muted)', fontSize: '0.8125rem', fontFamily: 'var(--font-body)' }}>
                         No missions in pool
                       </p>
                     )}
@@ -1097,36 +1331,40 @@ export default function EventDetail() {
 
         {/* Feed tab */}
         {activeTab === 'feed' && event && (
-          <div className="mb-6">
+          <div className="mb-6 animate-fade-in">
             <ActivityFeed eventId={event.id} feedMode={event.feed_mode || 'secret'} />
           </div>
         )}
 
         {/* Action buttons */}
-        <div className="flex gap-3">
+        <div className="flex gap-3 mt-8">
           <button
             onClick={handleClone}
             disabled={cloning}
-            className="flex-1 py-3 rounded-xl bg-emerald-700 text-white font-semibold hover:bg-emerald-800 transition-colors text-sm disabled:opacity-50"
+            className="pq-btn pq-btn-primary flex-1 py-3"
           >
             {cloning ? 'Cloning...' : 'Clone Event'}
           </button>
           <button
             onClick={handleDeleteEvent}
             disabled={deleting}
-            className="py-3 px-6 rounded-xl border border-red-300 text-red-600 font-semibold hover:bg-red-50 transition-colors text-sm disabled:opacity-50"
+            className="pq-btn pq-btn-danger py-3 px-6"
           >
             {deleting ? 'Deleting...' : 'Delete'}
           </button>
         </div>
 
-        {error && <p className="text-red-600 text-sm mt-4">{error}</p>}
+        {error && (
+          <p className="mt-4" style={{ color: 'var(--color-danger)', fontSize: '0.875rem', fontFamily: 'var(--font-body)' }}>
+            {error}
+          </p>
+        )}
       </div>
 
       {/* Copy toast */}
       {copyToast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-slide-down">
-          <div className="bg-stone-800 text-white px-5 py-2.5 rounded-xl shadow-lg text-sm font-medium">
+        <div className="pq-toast">
+          <div className="pq-toast-inner">
             {copyToast}
           </div>
         </div>

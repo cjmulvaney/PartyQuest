@@ -142,22 +142,59 @@ export default function Register() {
     }
   }
 
+  // --- Loading state ---
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-stone-100">
-        <p className="text-stone-500">Loading event...</p>
+      <div
+        className="min-h-screen flex flex-col items-center justify-center px-4"
+        style={{ background: 'var(--color-bg)' }}
+      >
+        <div className="pq-spinner" style={{ width: 40, height: 40 }} />
+        <p
+          className="mt-4 font-body"
+          style={{ color: 'var(--color-text-muted)', fontFamily: 'var(--font-body)' }}
+        >
+          Loading event...
+        </p>
       </div>
     )
   }
 
+  // --- Fatal error (no event loaded) ---
   if (error && !event) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-stone-100 px-4">
-        <div className="text-center space-y-4">
-          <p className="text-red-600">{error}</p>
+      <div
+        className="min-h-screen flex items-center justify-center px-4"
+        style={{ background: 'var(--color-bg)' }}
+      >
+        <div className="pq-card animate-fade-in text-center max-w-sm w-full p-8">
+          <div
+            className="mx-auto mb-4 flex items-center justify-center"
+            style={{
+              width: 56,
+              height: 56,
+              borderRadius: 'var(--radius-full)',
+              background: 'var(--color-danger)',
+              color: 'var(--color-text-inverse)',
+              fontSize: 24,
+              fontWeight: 700,
+            }}
+          >
+            !
+          </div>
+          <p
+            className="text-lg font-semibold mb-2"
+            style={{ color: 'var(--color-danger)', fontFamily: 'var(--font-heading)' }}
+          >
+            Oops
+          </p>
+          <p className="mb-6" style={{ color: 'var(--color-text-secondary)' }}>
+            {error}
+          </p>
           <button
             onClick={() => navigate('/')}
-            className="text-emerald-700 font-medium hover:underline"
+            className="pq-btn pq-btn-ghost"
+            style={{ fontFamily: 'var(--font-body)' }}
           >
             Go home
           </button>
@@ -166,46 +203,89 @@ export default function Register() {
     )
   }
 
-  // Success state — show access code and play link
+  // --- Success state ---
   if (success) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-stone-100 px-4">
-        <div className="max-w-sm w-full space-y-6 text-center">
-          <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-6 space-y-3">
-            <p className="text-4xl">🎉</p>
-            <h2 className="text-2xl font-bold text-emerald-700">You're in!</h2>
-            <p className="text-emerald-600">Welcome to {event.name}</p>
-
-            <div className="mt-4">
-              <p className="text-emerald-600 text-sm font-medium mb-1">Your Access Code</p>
-              <p className="text-3xl font-mono font-bold text-emerald-700 tracking-widest">
-                {success.accessCode}
-              </p>
-              <p className="text-emerald-600 text-xs mt-1">
-                Screenshot or write this down — you'll need it to rejoin
-              </p>
-            </div>
+      <div
+        className="min-h-screen flex items-center justify-center px-4 py-8"
+        style={{ background: 'var(--color-bg)' }}
+      >
+        <div className="max-w-sm w-full animate-slide-up" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {/* Celebratory header */}
+          <div className="text-center">
+            <h1
+              className="text-3xl font-bold"
+              style={{ color: 'var(--color-success)', fontFamily: 'var(--font-heading)' }}
+            >
+              You're in!
+            </h1>
+            <p className="mt-1" style={{ color: 'var(--color-text-secondary)', fontFamily: 'var(--font-body)' }}>
+              Welcome to {event.name}
+            </p>
           </div>
 
+          {/* Access code card */}
+          <div
+            className="pq-card p-6 text-center"
+            style={{
+              background: 'var(--color-success-light)',
+              border: '2px solid var(--color-success)',
+            }}
+          >
+            <p
+              className="text-sm font-semibold uppercase tracking-wider mb-2"
+              style={{ color: 'var(--color-success)', fontFamily: 'var(--font-body)', letterSpacing: '0.08em' }}
+            >
+              Your Access Code
+            </p>
+            <p
+              className="font-bold tracking-widest"
+              style={{
+                fontFamily: 'var(--font-heading)',
+                fontSize: '2.5rem',
+                lineHeight: 1.2,
+                color: 'var(--color-navy)',
+                letterSpacing: '0.2em',
+              }}
+            >
+              {success.accessCode}
+            </p>
+            <p className="mt-3 text-sm" style={{ color: 'var(--color-text-muted)' }}>
+              Save this code -- you will need it to rejoin
+            </p>
+          </div>
+
+          {/* Action buttons */}
           <button
             onClick={() => navigate(`/play/${success.accessCode}`)}
-            className="w-full py-3 rounded-xl bg-emerald-700 text-white font-semibold text-lg hover:bg-emerald-800 active:bg-emerald-900 transition-colors"
+            className="pq-btn pq-btn-primary w-full"
+            style={{
+              padding: '14px 0',
+              fontSize: '1.1rem',
+              fontFamily: 'var(--font-heading)',
+              borderRadius: 'var(--radius-lg)',
+            }}
           >
             Start Playing
           </button>
 
           <button
             onClick={() => copyWithToast(success.accessCode, 'Access code copied!', 'accessCode')}
-            className="w-full py-3 rounded-xl border border-stone-300 text-stone-600 font-medium hover:bg-stone-200 transition-colors"
+            className="pq-btn pq-btn-secondary w-full"
+            style={{
+              padding: '14px 0',
+              fontFamily: 'var(--font-body)',
+              borderRadius: 'var(--radius-lg)',
+            }}
           >
-            {copiedKey === 'accessCode' ? '\u2713 Copied!' : 'Copy Access Code'}
+            {copiedKey === 'accessCode' ? 'Copied!' : 'Copy Access Code'}
           </button>
         </div>
 
         {/* Copy toast */}
         {copyToast && (
-          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-slide-down">
-            <div className="bg-stone-800 text-white px-5 py-2.5 rounded-xl shadow-lg text-sm font-medium">
+          <div className="pq-toast fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-slide-up">
+            <div className="pq-toast-inner">
               {copyToast}
             </div>
           </div>
@@ -214,6 +294,7 @@ export default function Register() {
     )
   }
 
+  // --- Registration form ---
   const eventDate = new Date(event.start_time).toLocaleDateString('en-US', {
     weekday: 'long',
     month: 'long',
@@ -221,48 +302,112 @@ export default function Register() {
   })
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-stone-100 px-4">
-      <div className="max-w-sm w-full space-y-6">
+    <div
+      className="min-h-screen flex items-center justify-center px-4 py-8"
+      style={{ background: 'var(--color-bg)' }}
+    >
+      <div className="max-w-sm w-full animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+        {/* Invitation header */}
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-emerald-700">Party Quest</h1>
-          <p className="text-stone-400 text-sm mt-1">You've been invited!</p>
-        </div>
-
-        {/* Event info */}
-        <div className="rounded-xl bg-white border border-stone-200 p-4 text-center space-y-1">
-          <h2 className="text-xl font-bold text-stone-800">{event.name}</h2>
-          <p className="text-stone-500 text-sm capitalize">{event.event_type}</p>
-          <p className="text-stone-400 text-sm">{eventDate}</p>
-        </div>
-
-        {/* Registration form */}
-        <form onSubmit={handleRegister} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-stone-600 mb-1">
-              Your Name *
-            </label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Enter your name"
-              className="w-full px-4 py-3 rounded-xl border border-stone-300 bg-white text-stone-800 placeholder-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-transparent"
-              autoFocus
-            />
-          </div>
-
-          {error && <p className="text-red-600 text-sm">{error}</p>}
-
-          <button
-            type="submit"
-            disabled={submitting || !name.trim()}
-            className="w-full py-3 rounded-xl bg-emerald-700 text-white font-semibold text-lg hover:bg-emerald-800 active:bg-emerald-900 transition-colors disabled:opacity-50"
+          <p
+            className="text-sm font-semibold uppercase tracking-wider mb-1"
+            style={{ color: 'var(--color-primary)', fontFamily: 'var(--font-body)', letterSpacing: '0.1em' }}
           >
-            {submitting ? 'Registering...' : 'Join Event'}
-          </button>
-        </form>
+            You're Invited
+          </p>
+          <h1
+            className="text-3xl font-bold"
+            style={{ color: 'var(--color-navy)', fontFamily: 'var(--font-heading)' }}
+          >
+            Party Quest
+          </h1>
+        </div>
 
-        <p className="text-stone-400 text-xs text-center">
+        {/* Event info card */}
+        <div
+          className="pq-card text-center p-6"
+          style={{
+            borderTop: '4px solid var(--color-accent)',
+          }}
+        >
+          <h2
+            className="text-xl font-bold mb-2"
+            style={{ color: 'var(--color-navy)', fontFamily: 'var(--font-heading)' }}
+          >
+            {event.name}
+          </h2>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span
+              className="pq-badge pq-badge-primary"
+              style={{ textTransform: 'capitalize' }}
+            >
+              {event.event_type}
+            </span>
+            <span className="pq-badge pq-badge-muted">
+              {eventDate}
+            </span>
+          </div>
+        </div>
+
+        {/* Registration form card */}
+        <div className="pq-card p-6">
+          <form onSubmit={handleRegister} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div>
+              <label
+                className="block text-sm font-semibold mb-2"
+                style={{ color: 'var(--color-text)', fontFamily: 'var(--font-body)' }}
+              >
+                Your Name
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Enter your name"
+                className="pq-input w-full"
+                autoFocus
+              />
+            </div>
+
+            {error && (
+              <p
+                className="text-sm font-medium"
+                style={{
+                  color: 'var(--color-danger)',
+                  fontFamily: 'var(--font-body)',
+                }}
+              >
+                {error}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={submitting || !name.trim()}
+              className="pq-btn pq-btn-primary w-full"
+              style={{
+                padding: '14px 0',
+                fontSize: '1.1rem',
+                fontFamily: 'var(--font-heading)',
+                borderRadius: 'var(--radius-lg)',
+              }}
+            >
+              {submitting ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="pq-spinner" style={{ width: 18, height: 18 }} />
+                  Registering...
+                </span>
+              ) : (
+                'Join Event'
+              )}
+            </button>
+          </form>
+        </div>
+
+        <p
+          className="text-center text-xs"
+          style={{ color: 'var(--color-text-muted)', fontFamily: 'var(--font-body)' }}
+        >
           By joining, you'll receive missions to complete during the event.
         </p>
       </div>

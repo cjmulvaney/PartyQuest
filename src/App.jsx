@@ -1,4 +1,5 @@
 import { Routes, Route } from 'react-router-dom'
+import { ThemeProvider } from './hooks/useTheme.jsx'
 import Home from './pages/Home.jsx'
 import Join from './pages/Join.jsx'
 import Play from './pages/Play.jsx'
@@ -16,24 +17,26 @@ import OrganizersPage from './pages/admin/OrganizersPage.jsx'
 
 export default function App() {
   return (
-    <div className="min-h-screen bg-stone-100">
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/join" element={<Join />} />
-        <Route path="/play/:accessCode" element={<Play />} />
-        <Route path="/register/:eventCode" element={<Register />} />
-        <Route path="/spectator" element={<Spectator />} />
-        <Route path="/auth/callback" element={<AuthCallback />} />
-        <Route path="/organizer" element={<Dashboard />} />
-        <Route path="/organizer/new" element={<CreateEvent />} />
-        <Route path="/organizer/event/:id" element={<EventDetail />} />
-        <Route path="/admin" element={<AdminLayout />}>
-          <Route index element={<MissionsPage />} />
-          <Route path="events" element={<EventsPage />} />
-          <Route path="feedback" element={<FeedbackPage />} />
-          <Route path="organizers" element={<OrganizersPage />} />
-        </Route>
-      </Routes>
-    </div>
+    <ThemeProvider>
+      <div className="min-h-screen pq-bg-texture" style={{ backgroundColor: 'var(--color-bg)', color: 'var(--color-text)' }}>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/join" element={<Join />} />
+          <Route path="/play/:accessCode" element={<Play />} />
+          <Route path="/register/:eventCode" element={<Register />} />
+          <Route path="/spectator" element={<Spectator />} />
+          <Route path="/auth/callback" element={<AuthCallback />} />
+          <Route path="/organizer" element={<Dashboard />} />
+          <Route path="/organizer/new" element={<CreateEvent />} />
+          <Route path="/organizer/event/:id" element={<EventDetail />} />
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route index element={<MissionsPage />} />
+            <Route path="events" element={<EventsPage />} />
+            <Route path="feedback" element={<FeedbackPage />} />
+            <Route path="organizers" element={<OrganizersPage />} />
+          </Route>
+        </Routes>
+      </div>
+    </ThemeProvider>
   )
 }
