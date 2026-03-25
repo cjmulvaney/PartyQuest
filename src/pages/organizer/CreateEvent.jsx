@@ -42,6 +42,9 @@ export default function CreateEvent() {
   const [participantCount, setParticipantCount] = useState(10)
   const [participantNames, setParticipantNames] = useState('')
   const [anonymityEnabled, setAnonymityEnabled] = useState(false)
+  const [feedMode, setFeedMode] = useState('secret')
+  const [feedPhotosEnabled, setFeedPhotosEnabled] = useState(true)
+  const [feedCommentsEnabled, setFeedCommentsEnabled] = useState(true)
 
   // Step 3 — Missions
   const [missionCount, setMissionCount] = useState(3)
@@ -101,6 +104,9 @@ export default function CreateEvent() {
       setEmailOptIn(data.email_opt_in || false)
       setOrganizerEmail(data.organizer_email || user.email || '')
       setAnonymityEnabled(data.anonymity_enabled || false)
+      if (data.feed_mode) setFeedMode(data.feed_mode)
+      setFeedPhotosEnabled(data.feed_photos_enabled !== false)
+      setFeedCommentsEnabled(data.feed_comments_enabled !== false)
       if (data.event_config?.[0]) {
         const config = data.event_config[0]
         setMissionCount(config.mission_count || 3)
@@ -171,6 +177,10 @@ export default function CreateEvent() {
   // Auth gate
   useEffect(() => {
     if (!authLoading && !user) {
+      if (sessionStorage.getItem('pq_signed_out')) {
+        navigate('/organizer')
+        return
+      }
       signInWithGoogle()
     }
   }, [user, authLoading])
@@ -275,6 +285,9 @@ export default function CreateEvent() {
         end_time: new Date(endTime).toISOString(),
         event_code: eventCode,
         anonymity_enabled: anonymityEnabled,
+        feed_mode: feedMode,
+        feed_photos_enabled: feedPhotosEnabled,
+        feed_comments_enabled: feedCommentsEnabled,
         how_heard: howHeard || null,
         email_opt_in: emailOptIn,
         organizer_email: emailOptIn ? organizerEmail : null,
@@ -814,6 +827,87 @@ export default function CreateEvent() {
                     Hide participant names on leaderboard
                   </span>
                 </label>
+              </div>
+
+              {/* Feed Settings */}
+              <div className="mt-6 pt-5" style={{ borderTop: '1px solid var(--color-border-light)' }}>
+                <h3
+                  style={{
+                    fontFamily: 'var(--font-heading)',
+                    fontSize: '1rem',
+                    fontWeight: 700,
+                    color: 'var(--color-text)',
+                    marginBottom: '0.5rem',
+                  }}
+                >
+                  Activity Feed Settings
+                </h3>
+                <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: '1rem', lineHeight: 1.5 }}>
+                  Control what participants and spectators see in the live activity feed when missions are completed.
+                </p>
+
+                {/* Feed mode */}
+                <div className="mb-4">
+                  <label
+                    className="block mb-1.5"
+                    style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}
+                  >
+                    Mission Visibility
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setFeedMode('secret')}
+                      className={feedMode === 'secret' ? 'pq-btn pq-btn-primary' : 'pq-btn pq-btn-secondary'}
+                      style={{ fontFamily: 'var(--font-body)', padding: '0.75rem 1rem', fontSize: '0.8rem' }}
+                    >
+                      Secret
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFeedMode('transparent')}
+                      className={feedMode === 'transparent' ? 'pq-btn pq-btn-primary' : 'pq-btn pq-btn-secondary'}
+                      style={{ fontFamily: 'var(--font-body)', padding: '0.75rem 1rem', fontSize: '0.8rem' }}
+                    >
+                      Show Mission
+                    </button>
+                  </div>
+                  <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.375rem' }}>
+                    {feedMode === 'secret'
+                      ? 'Feed shows "Completed a mission" without revealing what it was.'
+                      : 'Feed shows the actual mission text that was completed.'}
+                  </p>
+                </div>
+
+                {/* Photo toggle */}
+                <div className="mb-3">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={feedPhotosEnabled}
+                      onChange={(e) => setFeedPhotosEnabled(e.target.checked)}
+                      style={{ accentColor: 'var(--color-primary)', width: '18px', height: '18px' }}
+                    />
+                    <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>
+                      Show photos in the activity feed
+                    </span>
+                  </label>
+                </div>
+
+                {/* Comments toggle */}
+                <div>
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={feedCommentsEnabled}
+                      onChange={(e) => setFeedCommentsEnabled(e.target.checked)}
+                      style={{ accentColor: 'var(--color-primary)', width: '18px', height: '18px' }}
+                    />
+                    <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>
+                      Show completion comments in the activity feed
+                    </span>
+                  </label>
+                </div>
               </div>
             </div>
           </div>

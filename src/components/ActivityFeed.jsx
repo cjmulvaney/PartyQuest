@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { getAvatarColor, getInitials } from '../lib/avatar.js'
 
-function TimelineEntry({ entry, feedMode, isFirst, isLast, index }) {
+function TimelineEntry({ entry, feedMode, showPhotos, showComments, isFirst, isLast, index }) {
   const avatarColor = getAvatarColor(entry.participantName)
   const initials = getInitials(entry.participantName)
 
@@ -119,8 +119,24 @@ function TimelineEntry({ entry, feedMode, isFirst, isLast, index }) {
           )}
         </p>
 
+        {/* Comment/notes */}
+        {showComments && entry.notes && (
+          <p
+            className="mt-1"
+            style={{
+              fontFamily: 'var(--font-body)',
+              fontSize: '0.8rem',
+              color: 'var(--color-text-muted)',
+              fontStyle: 'italic',
+              lineHeight: 1.4,
+            }}
+          >
+            "{entry.notes}"
+          </p>
+        )}
+
         {/* Photo */}
-        {entry.photoUrl && (
+        {showPhotos && entry.photoUrl && (
           <div
             className="mt-2"
             style={{
@@ -148,7 +164,7 @@ function TimelineEntry({ entry, feedMode, isFirst, isLast, index }) {
   )
 }
 
-export default function ActivityFeed({ eventId, feedMode = 'secret' }) {
+export default function ActivityFeed({ eventId, feedMode = 'secret', showPhotos = true, showComments = true }) {
   const [entries, setEntries] = useState([])
   const [loading, setLoading] = useState(true)
   const channelRef = useRef(null)
@@ -173,7 +189,7 @@ export default function ActivityFeed({ eventId, feedMode = 'secret' }) {
     // Get completed missions
     const { data: completions } = await supabase
       .from('participant_missions')
-      .select('id, participant_id, completed_at, photo_url, missions(text)')
+      .select('id, participant_id, completed_at, photo_url, notes, missions(text)')
       .eq('completed', true)
       .in('participant_id', pIds)
       .order('completed_at', { ascending: false })
@@ -188,6 +204,7 @@ export default function ActivityFeed({ eventId, feedMode = 'secret' }) {
           missionText: c.missions?.text || '',
           completedAt: c.completed_at,
           photoUrl: c.photo_url,
+          notes: c.notes,
         }))
       setEntries(feedEntries)
     }
@@ -290,6 +307,8 @@ export default function ActivityFeed({ eventId, feedMode = 'secret' }) {
             key={entry.id}
             entry={entry}
             feedMode={feedMode}
+            showPhotos={showPhotos}
+            showComments={showComments}
             isFirst={i === 0}
             isLast={i === entries.length - 1}
             index={i}

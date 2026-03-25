@@ -17,9 +17,16 @@ export default function Dashboard() {
   useEffect(() => {
     if (authLoading) return
     if (!user) {
+      // Don't auto-sign-in if user just signed out
+      if (sessionStorage.getItem('pq_signed_out')) {
+        navigate('/')
+        return
+      }
       signInWithGoogle()
       return
     }
+    // Clear the signed-out flag on successful auth
+    sessionStorage.removeItem('pq_signed_out')
     loadEvents()
   }, [user, authLoading])
 
@@ -106,7 +113,14 @@ export default function Dashboard() {
                 className="pq-btn pq-btn-ghost text-sm"
                 style={{ fontFamily: 'var(--font-body)', color: 'var(--color-text-secondary)' }}
               >
-                Join an Event
+                Your Participant View
+              </button>
+              <button
+                onClick={() => navigate('/organizer/settings')}
+                className="pq-btn pq-btn-ghost text-sm"
+                style={{ fontFamily: 'var(--font-body)', color: 'var(--color-text-secondary)' }}
+              >
+                Settings
               </button>
             </nav>
           </div>

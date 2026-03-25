@@ -8,12 +8,14 @@ export default function AuthCallback() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
+        sessionStorage.removeItem('pq_signed_out')
         navigate('/organizer', { replace: true })
       } else {
         // Wait for the auth state change from the URL hash
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
           (event, session) => {
             if (event === 'SIGNED_IN' && session) {
+              sessionStorage.removeItem('pq_signed_out')
               subscription.unsubscribe()
               navigate('/organizer', { replace: true })
             }

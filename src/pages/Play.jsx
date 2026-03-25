@@ -59,7 +59,7 @@ export default function Play() {
 
     const { data: evt } = await supabase
       .from('events')
-      .select('id, name, status, anonymity_enabled, feed_mode')
+      .select('id, name, status, anonymity_enabled, feed_mode, feed_photos_enabled, feed_comments_enabled')
       .eq('id', part.event_id)
       .single()
 
@@ -299,7 +299,7 @@ export default function Play() {
 
         {tab === 'feed' && event && (
           <div className="animate-fade-in">
-            <ActivityFeed eventId={event.id} feedMode={event.feed_mode || 'secret'} />
+            <ActivityFeed eventId={event.id} feedMode={event.feed_mode || 'secret'} showPhotos={event.feed_photos_enabled !== false} showComments={event.feed_comments_enabled !== false} />
           </div>
         )}
       </div>

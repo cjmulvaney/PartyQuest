@@ -9,6 +9,7 @@ import AuthCallback from './pages/AuthCallback.jsx'
 import Dashboard from './pages/organizer/Dashboard.jsx'
 import CreateEvent from './pages/organizer/CreateEvent.jsx'
 import EventDetail from './pages/organizer/EventDetail.jsx'
+import OrganizerSettings from './pages/organizer/Settings.jsx'
 import AdminLayout from './pages/admin/AdminLayout.jsx'
 import MissionsPage from './pages/admin/MissionsPage.jsx'
 import EventsPage from './pages/admin/EventsPage.jsx'
@@ -29,6 +30,7 @@ export default function App() {
           <Route path="/organizer" element={<Dashboard />} />
           <Route path="/organizer/new" element={<CreateEvent />} />
           <Route path="/organizer/event/:id" element={<EventDetail />} />
+          <Route path="/organizer/settings" element={<OrganizerSettings />} />
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<MissionsPage />} />
             <Route path="events" element={<EventsPage />} />

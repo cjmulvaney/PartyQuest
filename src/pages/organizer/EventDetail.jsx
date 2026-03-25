@@ -34,6 +34,9 @@ export default function EventDetail() {
   // Add participant inline
   const [addingParticipant, setAddingParticipant] = useState(false)
   const [newParticipantName, setNewParticipantName] = useState('')
+  // Drag and drop
+  const [dragSource, setDragSource] = useState(null) // { type: 'participant'|'pool', participantIdx, missionIdx, mission }
+  const [dropTarget, setDropTarget] = useState(null) // { type: 'participant'|'pool', participantIdx, missionIdx }
   // Copy toast
   const [copyToast, setCopyToast] = useState('')
   const [copiedKey, setCopiedKey] = useState('')
@@ -189,10 +192,15 @@ export default function EventDetail() {
 
   useEffect(() => {
     if (!authLoading && !user) {
+      if (sessionStorage.getItem('pq_signed_out')) {
+        navigate('/')
+        return
+      }
       signInWithGoogle()
       return
     }
     if (user) {
+      sessionStorage.removeItem('pq_signed_out')
       loadData()
     }
   }, [user, authLoading, loadData])
@@ -308,6 +316,8 @@ export default function EventDetail() {
           event_code: code,
           anonymity_enabled: event.anonymity_enabled,
           feed_mode: event.feed_mode,
+          feed_photos_enabled: event.feed_photos_enabled,
+          feed_comments_enabled: event.feed_comments_enabled,
           status: 'upcoming',
         })
         .select()
@@ -437,6 +447,111 @@ export default function EventDetail() {
     setLocalAssignments(next)
     setSelectTarget(null)
     setHasUnsavedChanges(true)
+  }
+
+  // --- Drag and Drop handlers ---
+  function handleDragStartFromParticipant(e, participantIdx, missionIdx, mission) {
+    setDragSource({ type: 'participant', participantIdx, missionIdx, mission })
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', mission?.missions?.text || '')
+  }
+
+  function handleDragStartFromPool(e, mission) {
+    setDragSource({ type: 'pool', mission })
+    e.dataTransfer.effectAllowed = 'copy'
+    e.dataTransfer.setData('text/plain', mission.text)
+  }
+
+  function handleDragOver(e, targetType, participantIdx, missionIdx) {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = targetType === 'pool' ? 'move' : 'copy'
+    setDropTarget({ type: targetType, participantIdx, missionIdx })
+  }
+
+  function handleDragLeave() {
+    setDropTarget(null)
+  }
+
+  function handleDropOnParticipant(e, targetPIdx, targetMIdx) {
+    e.preventDefault()
+    setDropTarget(null)
+    if (!dragSource) return
+
+    const base = ensureLocalAssignments()
+
+    if (dragSource.type === 'pool') {
+      // Dropping from pool onto a participant mission slot
+      const next = base.map((p, pIdx) => {
+        if (pIdx !== targetPIdx) return p
+        return {
+          ...p,
+          missions: p.missions.map((pm, mIdx) => {
+            if (mIdx !== targetMIdx) return pm
+            return { ...pm, mission_id: dragSource.mission.id, missions: { text: dragSource.mission.text } }
+          })
+        }
+      })
+      setLocalAssignments(next)
+      setHasUnsavedChanges(true)
+    } else if (dragSource.type === 'participant') {
+      // Swapping between two participant mission slots
+      const srcPIdx = dragSource.participantIdx
+      const srcMIdx = dragSource.missionIdx
+      const srcMission = base[srcPIdx].missions[srcMIdx]
+      const tgtMission = base[targetPIdx].missions[targetMIdx]
+
+      const next = base.map((p, pIdx) => {
+        if (pIdx === srcPIdx && pIdx === targetPIdx) {
+          // Same participant, swap missions
+          return {
+            ...p,
+            missions: p.missions.map((pm, mIdx) => {
+              if (mIdx === srcMIdx) return { ...pm, mission_id: tgtMission.mission_id, missions: tgtMission.missions }
+              if (mIdx === targetMIdx) return { ...pm, mission_id: srcMission.mission_id, missions: srcMission.missions }
+              return pm
+            })
+          }
+        }
+        if (pIdx === srcPIdx) {
+          return {
+            ...p,
+            missions: p.missions.map((pm, mIdx) => {
+              if (mIdx === srcMIdx) return { ...pm, mission_id: tgtMission.mission_id, missions: tgtMission.missions }
+              return pm
+            })
+          }
+        }
+        if (pIdx === targetPIdx) {
+          return {
+            ...p,
+            missions: p.missions.map((pm, mIdx) => {
+              if (mIdx === targetMIdx) return { ...pm, mission_id: srcMission.mission_id, missions: srcMission.missions }
+              return pm
+            })
+          }
+        }
+        return p
+      })
+      setLocalAssignments(next)
+      setHasUnsavedChanges(true)
+    }
+
+    setDragSource(null)
+  }
+
+  function handleDropOnPool(e) {
+    e.preventDefault()
+    setDropTarget(null)
+    if (!dragSource || dragSource.type !== 'participant') return
+
+    // Unassign the mission (move it back to the pool)
+    handleUnassign(dragSource.participantIdx, dragSource.missionIdx)
+    setDragSource(null)
+  }
+
+  function handleDragEnd() {
+    setDragSource(null)
+    setDropTarget(null)
   }
 
   function handleCancelEdits() {
@@ -1169,19 +1284,39 @@ export default function EventDetail() {
                     <div>
                       {participant.missions.map((pm, mIdx) => {
                         const isSelected = selectTarget?.participantIdx === pIdx && selectTarget?.missionIdx === mIdx
+                        const isDropHere = dropTarget?.type === 'participant' && dropTarget?.participantIdx === pIdx && dropTarget?.missionIdx === mIdx
+                        const canDrag = (isUpcoming || (isLive && !pm?.completed)) && pm?.mission_id
                         return (
                           <div
                             key={pm?.id || mIdx}
                             className="px-4 py-2.5 flex items-center justify-between"
+                            draggable={canDrag && !isEnded}
+                            onDragStart={canDrag ? (e) => handleDragStartFromParticipant(e, pIdx, mIdx, pm) : undefined}
+                            onDragEnd={handleDragEnd}
+                            onDragOver={(e) => handleDragOver(e, 'participant', pIdx, mIdx)}
+                            onDragLeave={handleDragLeave}
+                            onDrop={(e) => handleDropOnParticipant(e, pIdx, mIdx)}
                             style={{
                               borderBottom: '1px solid var(--color-border-light)',
-                              background: isSelected ? 'var(--color-primary-subtle)' : 'transparent',
-                              borderLeft: isSelected ? '3px solid var(--color-primary)' : '3px solid transparent',
+                              background: isDropHere ? 'var(--color-primary-subtle)' : isSelected ? 'var(--color-primary-subtle)' : 'transparent',
+                              borderLeft: isDropHere ? '3px solid var(--color-primary)' : isSelected ? '3px solid var(--color-primary)' : '3px solid transparent',
                               transition: 'var(--transition-fast)',
+                              cursor: canDrag && !isEnded ? 'grab' : 'default',
+                              opacity: dragSource?.type === 'participant' && dragSource?.participantIdx === pIdx && dragSource?.missionIdx === mIdx ? 0.4 : 1,
                             }}
                           >
                             {pm?.mission_id ? (
                               <>
+                                {canDrag && !isEnded && (
+                                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ color: 'var(--color-text-muted)', flexShrink: 0, marginRight: '0.5rem' }}>
+                                    <circle cx="6" cy="4" r="1.5" fill="currentColor" />
+                                    <circle cx="10" cy="4" r="1.5" fill="currentColor" />
+                                    <circle cx="6" cy="8" r="1.5" fill="currentColor" />
+                                    <circle cx="10" cy="8" r="1.5" fill="currentColor" />
+                                    <circle cx="6" cy="12" r="1.5" fill="currentColor" />
+                                    <circle cx="10" cy="12" r="1.5" fill="currentColor" />
+                                  </svg>
+                                )}
                                 <div className="flex-1 min-w-0">
                                   <p
                                     className="truncate"
@@ -1205,7 +1340,7 @@ export default function EventDetail() {
                                         onClick={() => handleSelectForSwap(pIdx, mIdx)}
                                         className="pq-btn pq-btn-ghost"
                                         style={{
-                                          color: isSelected ? 'var(--color-primary)' : 'var(--color-primary)',
+                                          color: 'var(--color-primary)',
                                           fontSize: '0.8125rem',
                                           fontWeight: 600,
                                           padding: '0.125rem 0.5rem',
@@ -1232,14 +1367,14 @@ export default function EventDetail() {
                             ) : (
                               <div className="flex-1 flex items-center justify-between">
                                 <span style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', fontStyle: 'italic', fontFamily: 'var(--font-body)' }}>
-                                  Empty slot
+                                  {isDropHere ? 'Drop here to assign' : 'Empty slot'}
                                 </span>
                                 {(isUpcoming || isLive) && (
                                   <button
                                     onClick={() => handleSelectForSwap(pIdx, mIdx)}
                                     className="pq-btn pq-btn-ghost"
                                     style={{
-                                      color: isSelected ? 'var(--color-primary)' : 'var(--color-primary)',
+                                      color: 'var(--color-primary)',
                                       fontSize: '0.8125rem',
                                       fontWeight: 600,
                                       padding: '0.125rem 0.5rem',
@@ -1265,7 +1400,17 @@ export default function EventDetail() {
 
               {/* Mission Pool Sidebar */}
               <div className="w-full lg:w-80 shrink-0">
-                <div className="lg:sticky lg:top-4 pq-card" style={{ padding: 0, overflow: 'hidden' }}>
+                <div
+                  className="lg:sticky lg:top-4 pq-card"
+                  style={{
+                    padding: 0,
+                    overflow: 'hidden',
+                    border: dropTarget?.type === 'pool' ? '2px dashed var(--color-primary)' : undefined,
+                  }}
+                  onDragOver={(e) => { e.preventDefault(); setDropTarget({ type: 'pool' }) }}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDropOnPool}
+                >
                   <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--color-border-light)' }}>
                     <h3
                       style={{
@@ -1275,30 +1420,43 @@ export default function EventDetail() {
                         color: 'var(--color-text)',
                       }}
                     >
-                      Mission Pool ({poolWithCounts.length})
+                      Mission Bank ({poolWithCounts.length})
                     </h3>
                     <p className="mt-1" style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', fontFamily: 'var(--font-body)' }}>
-                      Number shows how many players have each mission
+                      {dragSource?.type === 'participant' ? 'Drop here to unassign' : 'Drag missions to participants, or click to assign'}
                     </p>
                   </div>
                   <div className="max-h-[70vh] overflow-y-auto">
                     {poolWithCounts.map((mission) => (
                       <div
                         key={mission.id}
+                        draggable={!isEnded}
+                        onDragStart={(e) => handleDragStartFromPool(e, mission)}
+                        onDragEnd={handleDragEnd}
                         onClick={() => selectTarget && handlePoolMissionClick(mission)}
                         className="px-4 py-2.5 flex items-start justify-between gap-3"
                         style={{
                           borderBottom: '1px solid var(--color-border-light)',
-                          cursor: selectTarget ? 'pointer' : 'default',
+                          cursor: !isEnded ? 'grab' : selectTarget ? 'pointer' : 'default',
                           transition: 'var(--transition-fast)',
                         }}
                         onMouseEnter={(e) => {
-                          if (selectTarget) e.currentTarget.style.background = 'var(--color-primary-subtle)'
+                          if (selectTarget || !isEnded) e.currentTarget.style.background = 'var(--color-primary-subtle)'
                         }}
                         onMouseLeave={(e) => {
                           e.currentTarget.style.background = 'transparent'
                         }}
                       >
+                        {!isEnded && (
+                          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{ color: 'var(--color-text-muted)', flexShrink: 0, marginTop: '3px' }}>
+                            <circle cx="6" cy="4" r="1.5" fill="currentColor" />
+                            <circle cx="10" cy="4" r="1.5" fill="currentColor" />
+                            <circle cx="6" cy="8" r="1.5" fill="currentColor" />
+                            <circle cx="10" cy="8" r="1.5" fill="currentColor" />
+                            <circle cx="6" cy="12" r="1.5" fill="currentColor" />
+                            <circle cx="10" cy="12" r="1.5" fill="currentColor" />
+                          </svg>
+                        )}
                         <p className="flex-1" style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', fontFamily: 'var(--font-body)' }}>
                           {mission.text}
                         </p>
@@ -1332,7 +1490,7 @@ export default function EventDetail() {
         {/* Feed tab */}
         {activeTab === 'feed' && event && (
           <div className="mb-6 animate-fade-in">
-            <ActivityFeed eventId={event.id} feedMode={event.feed_mode || 'secret'} />
+            <ActivityFeed eventId={event.id} feedMode={event.feed_mode || 'secret'} showPhotos={event.feed_photos_enabled !== false} showComments={event.feed_comments_enabled !== false} />
           </div>
         )}
 

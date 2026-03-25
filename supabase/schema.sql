@@ -44,6 +44,10 @@ create table events (
   status text default 'upcoming' check (status in ('upcoming', 'active', 'ended')),
   -- V2.1: feed_mode controls activity feed visibility ('secret' = hide mission text, 'transparent' = show mission text)
   feed_mode text default 'secret' check (feed_mode in ('secret', 'transparent')),
+  -- V2.2: toggle whether photos are shown in the activity feed
+  feed_photos_enabled boolean default true,
+  -- V2.2: toggle whether comments/notes are shown in the activity feed
+  feed_comments_enabled boolean default true,
   -- V2.1: max participant count for self-registration (NULL = unlimited)
   max_participants integer,
   created_at timestamptz default now()

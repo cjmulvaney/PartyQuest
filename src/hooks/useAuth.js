@@ -36,6 +36,8 @@ export function useAuth() {
   }
 
   async function signOut() {
+    // Set flag so protected pages don't auto-redirect to sign-in
+    sessionStorage.setItem('pq_signed_out', '1')
     const { error } = await supabase.auth.signOut()
     if (error) {
       console.error('Sign-out error:', error.message)
