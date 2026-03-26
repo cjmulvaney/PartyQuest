@@ -34,9 +34,19 @@ export default function EventDetail() {
   // Add participant inline
   const [addingParticipant, setAddingParticipant] = useState(false)
   const [newParticipantName, setNewParticipantName] = useState('')
-  // Drag and drop
-  const [dragSource, setDragSource] = useState(null) // { type: 'participant'|'pool', participantIdx, missionIdx, mission }
-  const [dropTarget, setDropTarget] = useState(null) // { type: 'participant'|'pool', participantIdx, missionIdx }
+  // Drag and drop — use refs for reliable access in event handlers, state for visuals
+  const [dragSource, _setDragSource] = useState(null)
+  const [dropTarget, _setDropTarget] = useState(null)
+  const dragSourceRef = useRef(null)
+  const dropTargetRef = useRef(null)
+  const setDragSource = useCallback((val) => { dragSourceRef.current = val; _setDragSource(val) }, [])
+  const setDropTarget = useCallback((val) => {
+    // Dedup: skip if target hasn't changed (prevents excessive re-renders during drag)
+    const prev = dropTargetRef.current
+    if (prev?.type === val?.type && prev?.participantIdx === val?.participantIdx && prev?.missionIdx === val?.missionIdx) return
+    dropTargetRef.current = val
+    _setDropTarget(val)
+  }, [])
   // Copy toast
   const [copyToast, setCopyToast] = useState('')
   const [copiedKey, setCopiedKey] = useState('')
@@ -535,20 +545,14 @@ export default function EventDetail() {
   // --- Drag and Drop handlers ---
   function handleDragStartFromParticipant(e, participantIdx, missionIdx, mission) {
     setDragSource({ type: 'participant', participantIdx, missionIdx, mission })
-    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.effectAllowed = 'copyMove'
     e.dataTransfer.setData('text/plain', mission?.missions?.text || '')
   }
 
   function handleDragStartFromPool(e, mission) {
     setDragSource({ type: 'pool', mission })
-    e.dataTransfer.effectAllowed = 'copy'
+    e.dataTransfer.effectAllowed = 'copyMove'
     e.dataTransfer.setData('text/plain', mission.text)
-  }
-
-  function handleDragOver(e, targetType, participantIdx, missionIdx) {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-    setDropTarget({ type: targetType, participantIdx, missionIdx })
   }
 
   function handleDragLeave(e) {
@@ -563,11 +567,12 @@ export default function EventDetail() {
     e.preventDefault()
     e.stopPropagation()
     setDropTarget(null)
-    if (!dragSource) return
+    const source = dragSourceRef.current
+    if (!source) return
 
     const base = ensureLocalAssignments()
 
-    if (dragSource.type === 'pool') {
+    if (source.type === 'pool') {
       // Dropping from pool onto a specific slot — replace that slot
       const next = base.map((p, pIdx) => {
         if (pIdx !== targetPIdx) return p
@@ -575,15 +580,21 @@ export default function EventDetail() {
           ...p,
           missions: p.missions.map((pm, mIdx) => {
             if (mIdx !== targetMIdx) return pm
-            return { ...pm, mission_id: dragSource.mission.id, missions: { text: dragSource.mission.text } }
+            return { ...pm, mission_id: source.mission.id, missions: { text: source.mission.text } }
           })
         }
       })
       setLocalAssignments(next)
       setHasUnsavedChanges(true)
-    } else if (dragSource.type === 'participant') {
-      const srcPIdx = dragSource.participantIdx
-      const srcMIdx = dragSource.missionIdx
+    } else if (source.type === 'participant') {
+      const srcPIdx = source.participantIdx
+      const srcMIdx = source.missionIdx
+
+      if (srcPIdx === targetPIdx && srcMIdx === targetMIdx) {
+        // Dropped on itself — no-op
+        setDragSource(null)
+        return
+      }
 
       if (srcPIdx === targetPIdx) {
         // Same participant — swap the two slots
@@ -640,11 +651,12 @@ export default function EventDetail() {
   function handleDropOnPlayerCard(e, targetPIdx) {
     e.preventDefault()
     setDropTarget(null)
-    if (!dragSource) return
+    const source = dragSourceRef.current
+    if (!source) return
 
     const base = ensureLocalAssignments()
 
-    if (dragSource.type === 'pool') {
+    if (source.type === 'pool') {
       // Find first empty slot or first non-completed slot to replace
       const targetMissions = base[targetPIdx].missions
       let slotIdx = targetMissions.findIndex(pm => !pm?.mission_id)
@@ -659,20 +671,20 @@ export default function EventDetail() {
           ...p,
           missions: p.missions.map((pm, mIdx) => {
             if (mIdx !== slotIdx) return pm
-            return { ...pm, mission_id: dragSource.mission.id, missions: { text: dragSource.mission.text } }
+            return { ...pm, mission_id: source.mission.id, missions: { text: source.mission.text } }
           })
         }
       })
       setLocalAssignments(next)
       setHasUnsavedChanges(true)
-    } else if (dragSource.type === 'participant') {
-      const srcPIdx = dragSource.participantIdx
+    } else if (source.type === 'participant') {
+      const srcPIdx = source.participantIdx
       if (srcPIdx === targetPIdx) {
         setDragSource(null)
         return // Dropped on same player — no-op
       }
 
-      const srcMission = base[srcPIdx].missions[dragSource.missionIdx]
+      const srcMission = base[srcPIdx].missions[source.missionIdx]
       if (!srcMission?.mission_id) {
         setDragSource(null)
         return
@@ -685,7 +697,7 @@ export default function EventDetail() {
           return {
             ...p,
             missions: p.missions.map((pm, mIdx) => {
-              if (mIdx === dragSource.missionIdx) return { ...pm, mission_id: null, missions: null }
+              if (mIdx === source.missionIdx) return { ...pm, mission_id: null, missions: null }
               return pm
             })
           }
@@ -722,16 +734,17 @@ export default function EventDetail() {
   function handleDropOnPool(e) {
     e.preventDefault()
     setDropTarget(null)
-    if (!dragSource || dragSource.type !== 'participant') return
+    const source = dragSourceRef.current
+    if (!source || source.type !== 'participant') return
 
     // Unassign the mission (move it back to the pool), then rebalance
     const base = ensureLocalAssignments()
     const next = base.map((p, pIdx) => {
-      if (pIdx !== dragSource.participantIdx) return p
+      if (pIdx !== source.participantIdx) return p
       return {
         ...p,
         missions: p.missions.map((pm, mIdx) => {
-          if (mIdx !== dragSource.missionIdx) return pm
+          if (mIdx !== source.missionIdx) return pm
           return { ...pm, mission_id: null, missions: null }
         })
       }
@@ -1465,8 +1478,10 @@ export default function EventDetail() {
                     }}
                     onDragOver={(e) => {
                       e.preventDefault()
-                      // Only show card-level highlight if dragging from a different player
-                      if (dragSource?.type === 'participant' && dragSource?.participantIdx !== pIdx) {
+                      e.dataTransfer.dropEffect = 'move'
+                      // Only show card-level highlight if dragging from a different player or pool
+                      const src = dragSourceRef.current
+                      if (src?.type === 'pool' || (src?.type === 'participant' && src?.participantIdx !== pIdx)) {
                         setDropTarget({ type: 'playerCard', participantIdx: pIdx })
                       }
                     }}
@@ -1519,7 +1534,7 @@ export default function EventDetail() {
                             draggable={canDrag && !isEnded}
                             onDragStart={canDrag ? (e) => handleDragStartFromParticipant(e, pIdx, mIdx, pm) : undefined}
                             onDragEnd={handleDragEnd}
-                            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDropTarget({ type: 'participant', participantIdx: pIdx, missionIdx: mIdx }) }}
+                            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'move'; setDropTarget({ type: 'participant', participantIdx: pIdx, missionIdx: mIdx }) }}
                             onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDropTarget(null) }}
                             onDrop={(e) => handleDropOnSlot(e, pIdx, mIdx)}
                             style={{
@@ -1634,7 +1649,7 @@ export default function EventDetail() {
                     overflow: 'hidden',
                     border: dropTarget?.type === 'pool' ? '2px dashed var(--color-primary)' : undefined,
                   }}
-                  onDragOver={(e) => { e.preventDefault(); setDropTarget({ type: 'pool' }) }}
+                  onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDropTarget({ type: 'pool' }) }}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDropOnPool}
                 >

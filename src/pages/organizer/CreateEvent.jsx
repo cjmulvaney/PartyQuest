@@ -55,6 +55,9 @@ export default function CreateEvent() {
   const [categories, setCategories] = useState([])
   const [selectedTags, setSelectedTags] = useState([])
   const [availableMissionCount, setAvailableMissionCount] = useState(0)
+  const [expandedCategories, setExpandedCategories] = useState({})
+  const [categoryMissions, setCategoryMissions] = useState({})
+  const [categoryMissionCounts, setCategoryMissionCounts] = useState({})
 
   // Step 4 — Generated data
   const [eventCode, setEventCode] = useState('')
@@ -140,7 +143,7 @@ export default function CreateEvent() {
     }
   }, [participantNames, step])
 
-  // Load categories
+  // Load categories and their mission counts
   useEffect(() => {
     async function loadCategories() {
       const { data } = await supabase
@@ -154,10 +157,42 @@ export default function CreateEvent() {
         if (selectedTags.length === 0) {
           setSelectedTags(data.map((c) => c.id))
         }
+        // Load mission counts per category
+        const counts = {}
+        for (const cat of data) {
+          const { count } = await supabase
+            .from('missions')
+            .select('id', { count: 'exact', head: true })
+            .eq('active', true)
+            .eq('category_id', cat.id)
+          counts[cat.id] = count || 0
+        }
+        setCategoryMissionCounts(counts)
       }
     }
     loadCategories()
   }, [])
+
+  // Load missions for expanded categories on demand
+  async function toggleCategoryExpanded(catId) {
+    setExpandedCategories((prev) => {
+      const next = { ...prev }
+      next[catId] = !next[catId]
+      return next
+    })
+    // Lazy-load missions for this category if not cached
+    if (!categoryMissions[catId]) {
+      const { data } = await supabase
+        .from('missions')
+        .select('id, text')
+        .eq('active', true)
+        .eq('category_id', catId)
+        .order('text')
+      if (data) {
+        setCategoryMissions((prev) => ({ ...prev, [catId]: data }))
+      }
+    }
+  }
 
   // Count available missions when selected categories change
   useEffect(() => {
@@ -1096,7 +1131,7 @@ export default function CreateEvent() {
                 </div>
               )}
 
-              {/* Categories */}
+              {/* Categories — expandable with mission preview */}
               <div>
                 <label
                   className="block mb-2"
@@ -1104,33 +1139,109 @@ export default function CreateEvent() {
                 >
                   Categories
                 </label>
-                <div className="flex flex-wrap gap-2">
+                <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: '0.75rem', lineHeight: 1.5 }}>
+                  Check the categories you want to include. Expand any category to preview its missions.
+                </p>
+                <div className="flex flex-col gap-1">
                   {categories.map((cat) => {
                     const isSelected = selectedTags.includes(cat.id)
+                    const isExpanded = expandedCategories[cat.id]
+                    const missions = categoryMissions[cat.id]
+                    const count = categoryMissionCounts[cat.id] ?? '...'
                     return (
-                      <button
+                      <div
                         key={cat.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedTags((prev) =>
-                            isSelected
-                              ? prev.filter((t) => t !== cat.id)
-                              : [...prev, cat.id]
-                          )
-                        }}
-                        className={`pq-badge ${isSelected ? 'pq-badge-primary' : 'pq-badge-muted'}`}
                         style={{
-                          cursor: 'pointer',
-                          fontFamily: 'var(--font-body)',
-                          fontSize: '0.8rem',
-                          padding: '0.375rem 0.875rem',
-                          borderRadius: 'var(--radius-full)',
+                          borderRadius: 'var(--radius-lg)',
+                          border: isSelected ? '1.5px solid var(--color-primary-light)' : '1px solid var(--color-border-light)',
+                          background: isSelected ? 'var(--color-primary-subtle)' : 'var(--color-surface)',
+                          overflow: 'hidden',
                           transition: 'var(--transition-fast)',
-                          border: isSelected ? 'none' : '1px solid var(--color-border)',
                         }}
                       >
-                        {cat.name}
-                      </button>
+                        {/* Category header row */}
+                        <div
+                          className="flex items-center gap-3 px-3 py-2.5"
+                          style={{ cursor: 'pointer' }}
+                        >
+                          {/* Checkbox */}
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {
+                              setSelectedTags((prev) =>
+                                isSelected
+                                  ? prev.filter((t) => t !== cat.id)
+                                  : [...prev, cat.id]
+                              )
+                            }}
+                            style={{ accentColor: 'var(--color-primary)', width: '16px', height: '16px', cursor: 'pointer', flexShrink: 0 }}
+                          />
+                          {/* Name + count — click to expand */}
+                          <div
+                            className="flex-1 flex items-center justify-between"
+                            onClick={() => toggleCategoryExpanded(cat.id)}
+                          >
+                            <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text)' }}>
+                              {cat.name}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
+                                {count} missions
+                              </span>
+                              <svg
+                                width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                                strokeLinecap="round" strokeLinejoin="round"
+                                style={{
+                                  color: 'var(--color-text-muted)',
+                                  transition: 'transform 0.2s ease',
+                                  transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                                }}
+                              >
+                                <polyline points="6 9 12 15 18 9" />
+                              </svg>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Expanded mission list */}
+                        {isExpanded && (
+                          <div
+                            style={{
+                              borderTop: '1px solid var(--color-border-light)',
+                              maxHeight: '200px',
+                              overflowY: 'auto',
+                              padding: '0.375rem 0',
+                            }}
+                          >
+                            {!missions ? (
+                              <div className="flex items-center justify-center py-3">
+                                <div className="pq-spinner" style={{ width: '16px', height: '16px' }} />
+                              </div>
+                            ) : missions.length === 0 ? (
+                              <p className="px-4 py-2" style={{ fontFamily: 'var(--font-body)', fontSize: '0.75rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                                No active missions in this category.
+                              </p>
+                            ) : (
+                              missions.map((m) => (
+                                <div
+                                  key={m.id}
+                                  className="px-4 py-1.5"
+                                  style={{
+                                    fontFamily: 'var(--font-body)',
+                                    fontSize: '0.8rem',
+                                    color: 'var(--color-text-secondary)',
+                                    lineHeight: 1.4,
+                                    borderBottom: '1px solid var(--color-border-light)',
+                                  }}
+                                >
+                                  {m.text}
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </div>
                     )
                   })}
                 </div>

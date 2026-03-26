@@ -19,7 +19,7 @@ import OrganizersPage from './pages/admin/OrganizersPage.jsx'
 export default function App() {
   return (
     <ThemeProvider>
-      <div className="min-h-screen pq-bg-texture" style={{ backgroundColor: 'var(--color-bg)', color: 'var(--color-text)' }}>
+      <div className="min-h-screen pq-bg-texture" style={{ backgroundColor: 'var(--color-bg)', color: 'var(--color-text)', position: 'relative' }}>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/join" element={<Join />} />
@@ -38,6 +38,22 @@ export default function App() {
             <Route path="organizers" element={<OrganizersPage />} />
           </Route>
         </Routes>
+        <span
+          style={{
+            position: 'fixed',
+            bottom: '8px',
+            right: '10px',
+            fontFamily: 'var(--font-body)',
+            fontSize: '0.6rem',
+            color: 'var(--color-text-muted)',
+            opacity: 0.35,
+            pointerEvents: 'none',
+            userSelect: 'none',
+            letterSpacing: '0.03em',
+          }}
+        >
+          v2.3
+        </span>
       </div>
     </ThemeProvider>
   )
