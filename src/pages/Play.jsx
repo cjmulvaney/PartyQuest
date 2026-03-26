@@ -59,7 +59,7 @@ export default function Play() {
 
     const { data: evt } = await supabase
       .from('events')
-      .select('id, name, status, anonymity_enabled, feed_mode, feed_photos_enabled, feed_comments_enabled')
+      .select('id, name, status, anonymity_enabled, feed_mode, feed_photos_enabled, feed_comments_enabled, feed_reactions_enabled, feed_interactive_comments_enabled')
       .eq('id', part.event_id)
       .single()
 
@@ -195,11 +195,11 @@ export default function Play() {
               </h1>
             </div>
             <button
-              onClick={() => navigate('/')}
+              onClick={() => navigate(-1)}
               className="pq-btn pq-btn-ghost"
               style={{ padding: '6px 12px', fontSize: '0.8rem', minHeight: 'auto' }}
             >
-              Exit
+              &larr; Back
             </button>
           </div>
 

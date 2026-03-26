@@ -570,30 +570,31 @@ export default function ActivityFeed({
     async (participantMissionId, emoji, alreadyReacted) => {
       if (!participantId) return
       if (alreadyReacted) {
-        await supabase
-          .from('completion_reactions')
-          .delete()
-          .eq('participant_mission_id', participantMissionId)
-          .eq('participant_id', participantId)
-          .eq('emoji', emoji)
+        // Optimistic remove
         setReactions((prev) =>
           prev.filter(
             (r) =>
               !(r.participant_mission_id === participantMissionId && r.participant_id === participantId && r.emoji === emoji)
           )
         )
+        await supabase
+          .from('completion_reactions')
+          .delete()
+          .eq('participant_mission_id', participantMissionId)
+          .eq('participant_id', participantId)
+          .eq('emoji', emoji)
       } else {
-        const { data } = await supabase
+        // Optimistic add with temp id
+        const tempReaction = { id: `temp-${Date.now()}`, participant_mission_id: participantMissionId, participant_id: participantId, emoji }
+        setReactions((prev) => [...prev, tempReaction])
+        await supabase
           .from('completion_reactions')
           .insert({ participant_mission_id: participantMissionId, participant_id: participantId, emoji })
-          .select()
-          .single()
-        if (data) {
-          setReactions((prev) => [...prev, data])
-        }
       }
+      // Reload to sync with DB
+      loadFeed()
     },
-    [participantId]
+    [participantId, loadFeed]
   )
 
   // Add a comment

@@ -170,7 +170,7 @@ export default function EventDetail() {
       parts.map(async (p) => {
         const { data: pm } = await supabase
           .from('participant_missions')
-          .select('id, completed, completed_at, mission_id, missions(text)')
+          .select('id, completed, completed_at, mission_id, missions(text, category_id, categories(name))')
           .eq('participant_id', p.id)
         return { ...p, missions: pm || [] }
       })
@@ -181,7 +181,7 @@ export default function EventDetail() {
 
   // Load all missions in the pool (for sidebar)
   const loadMissionPool = useCallback(async () => {
-    let query = supabase.from('missions').select('id, text').eq('active', true)
+    let query = supabase.from('missions').select('id, text, category_id, categories(name)').eq('active', true)
     if (config?.tag_filters?.length > 0) {
       query = query.in('category_id', config.tag_filters)
     }
@@ -1560,7 +1560,6 @@ export default function EventDetail() {
                                 )}
                                 <div className="flex-1 min-w-0">
                                   <p
-                                    className="truncate"
                                     style={{
                                       fontSize: '0.875rem',
                                       fontFamily: 'var(--font-body)',
@@ -1570,6 +1569,11 @@ export default function EventDetail() {
                                   >
                                     {pm.missions?.text || 'Unknown mission'}
                                   </p>
+                                  {pm.missions?.categories?.name && (
+                                    <span className="pq-badge pq-badge-muted" style={{ fontSize: '0.65rem', padding: '1px 6px', marginTop: '2px', display: 'inline-block' }}>
+                                      {pm.missions.categories.name}
+                                    </span>
+                                  )}
                                 </div>
                                 <div className="flex items-center gap-2 ml-3">
                                   {pm.completed && (
@@ -1699,9 +1703,16 @@ export default function EventDetail() {
                             <circle cx="10" cy="12" r="1.5" fill="currentColor" />
                           </svg>
                         )}
-                        <p className="flex-1" style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', fontFamily: 'var(--font-body)' }}>
-                          {mission.text}
-                        </p>
+                        <div className="flex-1">
+                          <p style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', fontFamily: 'var(--font-body)' }}>
+                            {mission.text}
+                          </p>
+                          {mission.categories?.name && (
+                            <span className="pq-badge pq-badge-muted" style={{ fontSize: '0.65rem', padding: '1px 6px', marginTop: '2px', display: 'inline-block' }}>
+                              {mission.categories.name}
+                            </span>
+                          )}
+                        </div>
                         <span
                           className="shrink-0 px-1.5 py-0.5"
                           style={{

@@ -235,39 +235,50 @@ export default function MissionCard({ mission, onSave }) {
       {/* Header row */}
       <div className="flex items-start gap-3 mb-4">
         {/* Toggle checkbox */}
-        <button
-          onClick={() => setCompleted(!completed)}
-          className="flex-shrink-0 flex items-center justify-center"
-          style={{
-            width: 32,
-            height: 32,
-            borderRadius: 'var(--radius-full)',
-            border: completed ? 'none' : '2px solid var(--color-border-strong)',
-            background: completed ? 'var(--color-success)' : 'var(--color-surface)',
-            cursor: 'pointer',
-            transition: 'all var(--transition-fast)',
-            minHeight: 44,
-            minWidth: 44,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 0,
-            margin: '-6px',
-          }}
-          aria-label={completed ? 'Mark incomplete' : 'Mark complete'}
-        >
-          {completed && (
-            <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
-              <path
-                d="M3.5 8.5L6.5 11.5L12.5 4.5"
-                stroke="white"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
+        <div className="flex-shrink-0 flex flex-col items-center" style={{ gap: '2px', margin: '-6px' }}>
+          <button
+            onClick={() => setCompleted(!completed)}
+            className="flex items-center justify-center"
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 'var(--radius-full)',
+              border: completed ? 'none' : '2px solid var(--color-border-strong)',
+              background: completed ? 'var(--color-success)' : 'var(--color-surface)',
+              cursor: 'pointer',
+              transition: 'all var(--transition-fast)',
+              minHeight: 44,
+              minWidth: 44,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 0,
+            }}
+            aria-label={completed ? 'Mark incomplete' : 'Mark complete'}
+          >
+            {completed && (
+              <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
+                <path
+                  d="M3.5 8.5L6.5 11.5L12.5 4.5"
+                  stroke="white"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            )}
+          </button>
+          {!completed && (
+            <span style={{
+              fontSize: '0.6rem',
+              color: 'var(--color-text-muted)',
+              fontFamily: 'var(--font-body)',
+              whiteSpace: 'nowrap',
+            }}>
+              complete?
+            </span>
           )}
-        </button>
+        </div>
 
         <div className="flex-1 min-w-0" style={{ marginLeft: 6 }}>
           <p
