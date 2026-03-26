@@ -92,6 +92,8 @@ export default function Spectator() {
                 feedMode={event.feed_mode || 'secret'}
                 showPhotos={event.feed_photos_enabled !== false}
                 showComments={event.feed_comments_enabled !== false}
+                showReactions={event.feed_reactions_enabled !== false}
+                showInteractiveComments={event.feed_interactive_comments_enabled === true}
               />
             </div>
           </div>

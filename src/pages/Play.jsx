@@ -299,7 +299,15 @@ export default function Play() {
 
         {tab === 'feed' && event && (
           <div className="animate-fade-in">
-            <ActivityFeed eventId={event.id} feedMode={event.feed_mode || 'secret'} showPhotos={event.feed_photos_enabled !== false} showComments={event.feed_comments_enabled !== false} />
+            <ActivityFeed
+              eventId={event.id}
+              feedMode={event.feed_mode || 'secret'}
+              showPhotos={event.feed_photos_enabled !== false}
+              showComments={event.feed_comments_enabled !== false}
+              showReactions={event.feed_reactions_enabled !== false}
+              showInteractiveComments={event.feed_interactive_comments_enabled === true}
+              participantId={participant?.id}
+            />
           </div>
         )}
       </div>

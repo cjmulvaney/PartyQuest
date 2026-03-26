@@ -45,6 +45,8 @@ export default function CreateEvent() {
   const [feedMode, setFeedMode] = useState('secret')
   const [feedPhotosEnabled, setFeedPhotosEnabled] = useState(true)
   const [feedCommentsEnabled, setFeedCommentsEnabled] = useState(true)
+  const [feedReactionsEnabled, setFeedReactionsEnabled] = useState(true)
+  const [feedInteractiveCommentsEnabled, setFeedInteractiveCommentsEnabled] = useState(false)
 
   // Step 3 — Missions
   const [missionCount, setMissionCount] = useState(3)
@@ -107,6 +109,8 @@ export default function CreateEvent() {
       if (data.feed_mode) setFeedMode(data.feed_mode)
       setFeedPhotosEnabled(data.feed_photos_enabled !== false)
       setFeedCommentsEnabled(data.feed_comments_enabled !== false)
+      setFeedReactionsEnabled(data.feed_reactions_enabled !== false)
+      setFeedInteractiveCommentsEnabled(data.feed_interactive_comments_enabled === true)
       if (data.event_config?.[0]) {
         const config = data.event_config[0]
         setMissionCount(config.mission_count || 3)
@@ -288,6 +292,8 @@ export default function CreateEvent() {
         feed_mode: feedMode,
         feed_photos_enabled: feedPhotosEnabled,
         feed_comments_enabled: feedCommentsEnabled,
+        feed_reactions_enabled: feedReactionsEnabled,
+        feed_interactive_comments_enabled: feedInteractiveCommentsEnabled,
         how_heard: howHeard || null,
         email_opt_in: emailOptIn,
         organizer_email: emailOptIn ? organizerEmail : null,
@@ -895,7 +901,7 @@ export default function CreateEvent() {
                 </div>
 
                 {/* Comments toggle */}
-                <div>
+                <div className="mb-3">
                   <label className="flex items-center gap-3 cursor-pointer">
                     <input
                       type="checkbox"
@@ -904,7 +910,37 @@ export default function CreateEvent() {
                       style={{ accentColor: 'var(--color-primary)', width: '18px', height: '18px' }}
                     />
                     <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>
-                      Show completion comments in the activity feed
+                      Show completion notes in the activity feed
+                    </span>
+                  </label>
+                </div>
+
+                {/* Emoji reactions toggle */}
+                <div className="mb-3">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={feedReactionsEnabled}
+                      onChange={(e) => setFeedReactionsEnabled(e.target.checked)}
+                      style={{ accentColor: 'var(--color-primary)', width: '18px', height: '18px' }}
+                    />
+                    <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>
+                      Allow emoji reactions on completions
+                    </span>
+                  </label>
+                </div>
+
+                {/* Interactive comments toggle */}
+                <div>
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={feedInteractiveCommentsEnabled}
+                      onChange={(e) => setFeedInteractiveCommentsEnabled(e.target.checked)}
+                      style={{ accentColor: 'var(--color-primary)', width: '18px', height: '18px' }}
+                    />
+                    <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>
+                      Allow comments on completions
                     </span>
                   </label>
                 </div>

@@ -2,7 +2,257 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { getAvatarColor, getInitials } from '../lib/avatar.js'
 
-function TimelineEntry({ entry, feedMode, showPhotos, showComments, isFirst, isLast, index }) {
+const REACTION_EMOJIS = ['\u{1F525}', '\u{1F44F}', '\u{1F60E}', '\u{1F389}', '\u{1F4AA}', '\u{2764}\uFE0F']
+
+function ReactionBar({ entryId, participantId, reactions, onToggleReaction }) {
+  const [showPicker, setShowPicker] = useState(false)
+
+  // Group reactions by emoji
+  const grouped = {}
+  ;(reactions || []).forEach((r) => {
+    if (!grouped[r.emoji]) grouped[r.emoji] = { count: 0, mine: false }
+    grouped[r.emoji].count++
+    if (r.participant_id === participantId) grouped[r.emoji].mine = true
+  })
+
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap mt-2">
+      {/* Existing reaction chips */}
+      {Object.entries(grouped).map(([emoji, data]) => (
+        <button
+          key={emoji}
+          onClick={() => onToggleReaction(entryId, emoji, data.mine)}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '3px',
+            padding: '2px 8px',
+            borderRadius: '999px',
+            border: data.mine
+              ? '1.5px solid var(--color-primary)'
+              : '1px solid var(--color-border-light)',
+            background: data.mine ? 'var(--color-primary-subtle)' : 'var(--color-surface)',
+            fontSize: '0.8rem',
+            cursor: 'pointer',
+            fontFamily: 'var(--font-body)',
+            lineHeight: 1.6,
+          }}
+        >
+          <span>{emoji}</span>
+          <span style={{ fontSize: '0.7rem', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
+            {data.count}
+          </span>
+        </button>
+      ))}
+
+      {/* Add reaction button */}
+      <div style={{ position: 'relative' }}>
+        <button
+          onClick={() => setShowPicker((v) => !v)}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '28px',
+            height: '28px',
+            borderRadius: '999px',
+            border: '1px solid var(--color-border-light)',
+            background: 'var(--color-surface)',
+            cursor: 'pointer',
+            fontSize: '0.8rem',
+            color: 'var(--color-text-muted)',
+          }}
+          title="Add reaction"
+        >
+          +
+        </button>
+
+        {/* Emoji picker popup */}
+        {showPicker && (
+          <div
+            style={{
+              position: 'absolute',
+              bottom: '100%',
+              left: 0,
+              marginBottom: '4px',
+              display: 'flex',
+              gap: '2px',
+              padding: '4px 6px',
+              borderRadius: 'var(--radius-lg)',
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border-light)',
+              boxShadow: 'var(--shadow-md)',
+              zIndex: 10,
+            }}
+          >
+            {REACTION_EMOJIS.map((emoji) => (
+              <button
+                key={emoji}
+                onClick={() => {
+                  const mine = grouped[emoji]?.mine
+                  onToggleReaction(entryId, emoji, mine)
+                  setShowPicker(false)
+                }}
+                style={{
+                  padding: '4px',
+                  fontSize: '1.1rem',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  borderRadius: '4px',
+                  lineHeight: 1,
+                }}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function CommentSection({ entryId, participantId, comments, participantMap, onAddComment }) {
+  const [expanded, setExpanded] = useState(false)
+  const [text, setText] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  const entryComments = (comments || []).filter((c) => c.participant_mission_id === entryId)
+  const commentCount = entryComments.length
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    if (!text.trim() || !participantId) return
+    setSubmitting(true)
+    await onAddComment(entryId, text.trim())
+    setText('')
+    setSubmitting(false)
+  }
+
+  return (
+    <div className="mt-2">
+      {/* Toggle / count */}
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        style={{
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer',
+          fontFamily: 'var(--font-body)',
+          fontSize: '0.75rem',
+          color: 'var(--color-text-muted)',
+          padding: 0,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '4px',
+        }}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+        </svg>
+        {commentCount > 0 ? `${commentCount} comment${commentCount !== 1 ? 's' : ''}` : 'Comment'}
+        {expanded ? ' \u25B4' : ' \u25BE'}
+      </button>
+
+      {expanded && (
+        <div
+          className="mt-1.5"
+          style={{
+            borderLeft: '2px solid var(--color-border-light)',
+            paddingLeft: '10px',
+          }}
+        >
+          {/* Existing comments */}
+          {entryComments.map((c) => (
+            <div key={c.id} className="mb-1.5">
+              <span
+                style={{
+                  fontFamily: 'var(--font-heading)',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  color: 'var(--color-text)',
+                }}
+              >
+                {participantMap[c.participant_id] || 'Unknown'}
+              </span>
+              <span
+                style={{
+                  fontFamily: 'var(--font-body)',
+                  fontSize: '0.75rem',
+                  color: 'var(--color-text-secondary)',
+                  marginLeft: '6px',
+                }}
+              >
+                {c.text}
+              </span>
+            </div>
+          ))}
+
+          {/* Add comment form */}
+          {participantId && (
+            <form onSubmit={handleSubmit} className="flex gap-1.5 mt-1">
+              <input
+                type="text"
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder="Add a comment..."
+                maxLength={200}
+                style={{
+                  flex: 1,
+                  fontFamily: 'var(--font-body)',
+                  fontSize: '0.75rem',
+                  padding: '4px 8px',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--color-border-light)',
+                  background: 'var(--color-surface)',
+                  color: 'var(--color-text)',
+                  outline: 'none',
+                }}
+              />
+              <button
+                type="submit"
+                disabled={!text.trim() || submitting}
+                style={{
+                  fontFamily: 'var(--font-body)',
+                  fontSize: '0.7rem',
+                  fontWeight: 600,
+                  padding: '4px 10px',
+                  borderRadius: 'var(--radius-md)',
+                  border: 'none',
+                  background: text.trim() ? 'var(--color-primary)' : 'var(--color-border)',
+                  color: 'var(--color-text-inverse)',
+                  cursor: text.trim() ? 'pointer' : 'default',
+                  opacity: submitting ? 0.6 : 1,
+                }}
+              >
+                Post
+              </button>
+            </form>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TimelineEntry({
+  entry,
+  feedMode,
+  showPhotos,
+  showComments,
+  showReactions,
+  showInteractiveComments,
+  participantId,
+  reactions,
+  comments,
+  participantMap,
+  onToggleReaction,
+  onAddComment,
+  isFirst,
+  isLast,
+  index,
+}) {
   const avatarColor = getAvatarColor(entry.participantName)
   const initials = getInitials(entry.participantName)
 
@@ -159,14 +409,46 @@ function TimelineEntry({ entry, feedMode, showPhotos, showComments, isFirst, isL
             />
           </div>
         )}
+
+        {/* Emoji reactions */}
+        {showReactions && (
+          <ReactionBar
+            entryId={entry.id}
+            participantId={participantId}
+            reactions={(reactions || []).filter((r) => r.participant_mission_id === entry.id)}
+            onToggleReaction={onToggleReaction}
+          />
+        )}
+
+        {/* Interactive comments */}
+        {showInteractiveComments && (
+          <CommentSection
+            entryId={entry.id}
+            participantId={participantId}
+            comments={comments}
+            participantMap={participantMap}
+            onAddComment={onAddComment}
+          />
+        )}
       </div>
     </div>
   )
 }
 
-export default function ActivityFeed({ eventId, feedMode = 'secret', showPhotos = true, showComments = true }) {
+export default function ActivityFeed({
+  eventId,
+  feedMode = 'secret',
+  showPhotos = true,
+  showComments = true,
+  showReactions = false,
+  showInteractiveComments = false,
+  participantId = null,
+}) {
   const [entries, setEntries] = useState([])
   const [loading, setLoading] = useState(true)
+  const [reactions, setReactions] = useState([])
+  const [comments, setComments] = useState([])
+  const [participantMap, setParticipantMap] = useState({})
   const channelRef = useRef(null)
 
   const loadFeed = useCallback(async () => {
@@ -184,6 +466,7 @@ export default function ActivityFeed({ eventId, feedMode = 'secret', showPhotos 
 
     const pMap = {}
     participants.forEach((p) => (pMap[p.id] = p.name))
+    setParticipantMap(pMap)
     const pIds = participants.map((p) => p.id)
 
     // Get completed missions
@@ -207,10 +490,30 @@ export default function ActivityFeed({ eventId, feedMode = 'secret', showPhotos 
           notes: c.notes,
         }))
       setEntries(feedEntries)
+
+      // Load reactions and comments for these entries
+      const pmIds = feedEntries.map((e) => e.id)
+      if (pmIds.length > 0) {
+        if (showReactions) {
+          const { data: rxns } = await supabase
+            .from('completion_reactions')
+            .select('id, participant_mission_id, participant_id, emoji')
+            .in('participant_mission_id', pmIds)
+          setReactions(rxns || [])
+        }
+        if (showInteractiveComments) {
+          const { data: cmts } = await supabase
+            .from('completion_comments')
+            .select('id, participant_mission_id, participant_id, text, created_at')
+            .in('participant_mission_id', pmIds)
+            .order('created_at', { ascending: true })
+          setComments(cmts || [])
+        }
+      }
     }
 
     setLoading(false)
-  }, [eventId])
+  }, [eventId, showReactions, showInteractiveComments])
 
   useEffect(() => {
     loadFeed()
@@ -233,8 +536,26 @@ export default function ActivityFeed({ eventId, feedMode = 'secret', showPhotos 
           }
         }
       )
-      .subscribe()
 
+    // Listen for reaction changes
+    if (showReactions) {
+      channel.on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'completion_reactions' },
+        () => loadFeed()
+      )
+    }
+
+    // Listen for new comments
+    if (showInteractiveComments) {
+      channel.on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'completion_comments' },
+        () => loadFeed()
+      )
+    }
+
+    channel.subscribe()
     channelRef.current = channel
 
     return () => {
@@ -242,7 +563,54 @@ export default function ActivityFeed({ eventId, feedMode = 'secret', showPhotos 
         supabase.removeChannel(channelRef.current)
       }
     }
-  }, [eventId, loadFeed])
+  }, [eventId, loadFeed, showReactions, showInteractiveComments])
+
+  // Toggle an emoji reaction
+  const handleToggleReaction = useCallback(
+    async (participantMissionId, emoji, alreadyReacted) => {
+      if (!participantId) return
+      if (alreadyReacted) {
+        await supabase
+          .from('completion_reactions')
+          .delete()
+          .eq('participant_mission_id', participantMissionId)
+          .eq('participant_id', participantId)
+          .eq('emoji', emoji)
+        setReactions((prev) =>
+          prev.filter(
+            (r) =>
+              !(r.participant_mission_id === participantMissionId && r.participant_id === participantId && r.emoji === emoji)
+          )
+        )
+      } else {
+        const { data } = await supabase
+          .from('completion_reactions')
+          .insert({ participant_mission_id: participantMissionId, participant_id: participantId, emoji })
+          .select()
+          .single()
+        if (data) {
+          setReactions((prev) => [...prev, data])
+        }
+      }
+    },
+    [participantId]
+  )
+
+  // Add a comment
+  const handleAddComment = useCallback(
+    async (participantMissionId, text) => {
+      if (!participantId) return
+      const { data } = await supabase
+        .from('completion_comments')
+        .insert({ participant_mission_id: participantMissionId, participant_id: participantId, text })
+        .select()
+        .single()
+      if (data) {
+        setComments((prev) => [...prev, data])
+      }
+    },
+    [participantId]
+  )
 
   if (loading) {
     return (
@@ -309,6 +677,14 @@ export default function ActivityFeed({ eventId, feedMode = 'secret', showPhotos 
             feedMode={feedMode}
             showPhotos={showPhotos}
             showComments={showComments}
+            showReactions={showReactions}
+            showInteractiveComments={showInteractiveComments}
+            participantId={participantId}
+            reactions={reactions}
+            comments={comments}
+            participantMap={participantMap}
+            onToggleReaction={handleToggleReaction}
+            onAddComment={handleAddComment}
             isFirst={i === 0}
             isLast={i === entries.length - 1}
             index={i}

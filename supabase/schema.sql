@@ -48,6 +48,10 @@ create table events (
   feed_photos_enabled boolean default true,
   -- V2.2: toggle whether comments/notes are shown in the activity feed
   feed_comments_enabled boolean default true,
+  -- V2.3: toggle whether emoji reactions are enabled on feed completions
+  feed_reactions_enabled boolean default true,
+  -- V2.3: toggle whether interactive comments are enabled on feed completions
+  feed_interactive_comments_enabled boolean default false,
   -- V2.1: max participant count for self-registration (NULL = unlimited)
   max_participants integer,
   created_at timestamptz default now()
@@ -99,6 +103,25 @@ create table feedback (
   created_at timestamptz default now()
 );
 
+-- V2.3: Emoji reactions on completion feed entries
+create table completion_reactions (
+  id uuid primary key default uuid_generate_v4(),
+  participant_mission_id uuid references participant_missions(id) on delete cascade,
+  participant_id uuid references participants(id) on delete cascade,
+  emoji text not null,
+  created_at timestamptz default now(),
+  unique(participant_mission_id, participant_id, emoji)
+);
+
+-- V2.3: Interactive comments on completion feed entries
+create table completion_comments (
+  id uuid primary key default uuid_generate_v4(),
+  participant_mission_id uuid references participant_missions(id) on delete cascade,
+  participant_id uuid references participants(id) on delete cascade,
+  text text not null,
+  created_at timestamptz default now()
+);
+
 -- ============================================================
 -- INDEXES
 -- ============================================================
@@ -113,6 +136,10 @@ create index idx_participants_access_code on participants(access_code);
 create index idx_participant_missions_participant on participant_missions(participant_id);
 create index idx_participant_missions_mission on participant_missions(mission_id);
 create index idx_feedback_event on feedback(event_id);
+create index idx_completion_reactions_pm on completion_reactions(participant_mission_id);
+create index idx_completion_reactions_participant on completion_reactions(participant_id);
+create index idx_completion_comments_pm on completion_comments(participant_mission_id);
+create index idx_completion_comments_participant on completion_comments(participant_id);
 
 -- ============================================================
 -- ROW LEVEL SECURITY
@@ -125,6 +152,8 @@ alter table event_config enable row level security;
 alter table participants enable row level security;
 alter table participant_missions enable row level security;
 alter table feedback enable row level security;
+alter table completion_reactions enable row level security;
+alter table completion_comments enable row level security;
 
 -- Categories: readable by everyone
 create policy "Categories are publicly readable"
@@ -218,3 +247,25 @@ create policy "Anyone can submit feedback"
 create policy "Feedback is readable"
   on feedback for select
   using (true);
+
+-- V2.3: Completion reactions: publicly readable/writable
+create policy "Completion reactions are publicly readable"
+  on completion_reactions for select
+  using (true);
+
+create policy "Anyone can add reactions"
+  on completion_reactions for insert
+  with check (true);
+
+create policy "Anyone can remove their reactions"
+  on completion_reactions for delete
+  using (true);
+
+-- V2.3: Completion comments: publicly readable/writable
+create policy "Completion comments are publicly readable"
+  on completion_comments for select
+  using (true);
+
+create policy "Anyone can add completion comments"
+  on completion_comments for insert
+  with check (true);

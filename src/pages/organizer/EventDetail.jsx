@@ -449,6 +449,89 @@ export default function EventDetail() {
     setHasUnsavedChanges(true)
   }
 
+  // --- Rebalance: ensure every participant has exactly config.mission_count missions ---
+  // Fills empty slots from pool, trims excess back to pool
+  function rebalanceAssignments(assignments, protectedMissionIds = []) {
+    const targetCount = config?.mission_count || 3
+    // Build set of all currently assigned mission IDs
+    const allAssigned = new Set()
+    assignments.forEach(p => p.missions.forEach(pm => {
+      if (pm?.mission_id) allAssigned.add(pm.mission_id)
+    }))
+    // Available pool missions not yet assigned to anyone (prefer unassigned)
+    const available = missionPool
+      .filter(m => !protectedMissionIds.includes(m.id))
+      .sort((a, b) => {
+        const aUsed = allAssigned.has(a.id) ? 1 : 0
+        const bUsed = allAssigned.has(b.id) ? 1 : 0
+        return aUsed - bUsed
+      })
+    let availIdx = 0
+
+    return assignments.map(p => {
+      let missions = [...p.missions]
+
+      if (missions.length > targetCount) {
+        // Trim excess — remove non-completed, non-protected slots from the end
+        const keep = []
+        const extras = []
+        missions.forEach(pm => {
+          if (keep.length < targetCount) {
+            keep.push(pm)
+          } else if (pm.completed || protectedMissionIds.includes(pm.mission_id)) {
+            // Protected or completed — swap with a non-protected from keep
+            const swapIdx = keep.findIndex(k => !k.completed && !protectedMissionIds.includes(k.mission_id))
+            if (swapIdx >= 0) {
+              extras.push(keep[swapIdx])
+              keep[swapIdx] = pm
+            } else {
+              extras.push(pm)
+            }
+          } else {
+            extras.push(pm)
+          }
+        })
+        missions = keep
+      }
+
+      if (missions.length < targetCount) {
+        // Fill empty slots — first fill any null mission_id slots, then add new ones
+        missions = missions.map(pm => {
+          if (!pm.mission_id && availIdx < available.length) {
+            const m = available[availIdx++]
+            return { ...pm, mission_id: m.id, missions: { text: m.text } }
+          }
+          return pm
+        })
+        // If still short, add new slot entries
+        while (missions.length < targetCount && availIdx < available.length) {
+          const m = available[availIdx++]
+          missions.push({
+            id: `new-${Date.now()}-${Math.random()}`,
+            mission_id: m.id,
+            missions: { text: m.text },
+            completed: false,
+            completed_at: null,
+            _originalMissionId: null,
+          })
+        }
+        // If pool is exhausted, pad with empty slots
+        while (missions.length < targetCount) {
+          missions.push({
+            id: `empty-${Date.now()}-${Math.random()}`,
+            mission_id: null,
+            missions: null,
+            completed: false,
+            completed_at: null,
+            _originalMissionId: null,
+          })
+        }
+      }
+
+      return { ...p, missions }
+    })
+  }
+
   // --- Drag and Drop handlers ---
   function handleDragStartFromParticipant(e, participantIdx, missionIdx, mission) {
     setDragSource({ type: 'participant', participantIdx, missionIdx, mission })
@@ -464,23 +547,28 @@ export default function EventDetail() {
 
   function handleDragOver(e, targetType, participantIdx, missionIdx) {
     e.preventDefault()
-    e.dataTransfer.dropEffect = targetType === 'pool' ? 'move' : 'copy'
+    e.dataTransfer.dropEffect = 'move'
     setDropTarget({ type: targetType, participantIdx, missionIdx })
   }
 
-  function handleDragLeave() {
-    setDropTarget(null)
+  function handleDragLeave(e) {
+    // Only clear if we're actually leaving the element (not entering a child)
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      setDropTarget(null)
+    }
   }
 
-  function handleDropOnParticipant(e, targetPIdx, targetMIdx) {
+  // Drop a mission onto a specific slot of a participant
+  function handleDropOnSlot(e, targetPIdx, targetMIdx) {
     e.preventDefault()
+    e.stopPropagation()
     setDropTarget(null)
     if (!dragSource) return
 
     const base = ensureLocalAssignments()
 
     if (dragSource.type === 'pool') {
-      // Dropping from pool onto a participant mission slot
+      // Dropping from pool onto a specific slot — replace that slot
       const next = base.map((p, pIdx) => {
         if (pIdx !== targetPIdx) return p
         return {
@@ -494,15 +582,15 @@ export default function EventDetail() {
       setLocalAssignments(next)
       setHasUnsavedChanges(true)
     } else if (dragSource.type === 'participant') {
-      // Swapping between two participant mission slots
       const srcPIdx = dragSource.participantIdx
       const srcMIdx = dragSource.missionIdx
-      const srcMission = base[srcPIdx].missions[srcMIdx]
-      const tgtMission = base[targetPIdx].missions[targetMIdx]
 
-      const next = base.map((p, pIdx) => {
-        if (pIdx === srcPIdx && pIdx === targetPIdx) {
-          // Same participant, swap missions
+      if (srcPIdx === targetPIdx) {
+        // Same participant — swap the two slots
+        const srcMission = base[srcPIdx].missions[srcMIdx]
+        const tgtMission = base[targetPIdx].missions[targetMIdx]
+        const next = base.map((p, pIdx) => {
+          if (pIdx !== srcPIdx) return p
           return {
             ...p,
             missions: p.missions.map((pm, mIdx) => {
@@ -511,28 +599,120 @@ export default function EventDetail() {
               return pm
             })
           }
+        })
+        setLocalAssignments(next)
+        setHasUnsavedChanges(true)
+      } else {
+        // Cross-player: replace target slot with source mission, clear source slot
+        const srcMission = base[srcPIdx].missions[srcMIdx]
+        const next = base.map((p, pIdx) => {
+          if (pIdx === srcPIdx) {
+            return {
+              ...p,
+              missions: p.missions.map((pm, mIdx) => {
+                if (mIdx === srcMIdx) return { ...pm, mission_id: null, missions: null }
+                return pm
+              })
+            }
+          }
+          if (pIdx === targetPIdx) {
+            return {
+              ...p,
+              missions: p.missions.map((pm, mIdx) => {
+                if (mIdx === targetMIdx) return { ...pm, mission_id: srcMission.mission_id, missions: srcMission.missions }
+                return pm
+              })
+            }
+          }
+          return p
+        })
+        // Rebalance so source player gets a new mission from pool
+        const rebalanced = rebalanceAssignments(next, [srcMission.mission_id])
+        setLocalAssignments(rebalanced)
+        setHasUnsavedChanges(true)
+      }
+    }
+
+    setDragSource(null)
+  }
+
+  // Drop a mission onto a participant card (header area) — moves mission to that player
+  function handleDropOnPlayerCard(e, targetPIdx) {
+    e.preventDefault()
+    setDropTarget(null)
+    if (!dragSource) return
+
+    const base = ensureLocalAssignments()
+
+    if (dragSource.type === 'pool') {
+      // Find first empty slot or first non-completed slot to replace
+      const targetMissions = base[targetPIdx].missions
+      let slotIdx = targetMissions.findIndex(pm => !pm?.mission_id)
+      if (slotIdx === -1) {
+        slotIdx = targetMissions.findIndex(pm => !pm?.completed)
+      }
+      if (slotIdx === -1) slotIdx = 0
+
+      const next = base.map((p, pIdx) => {
+        if (pIdx !== targetPIdx) return p
+        return {
+          ...p,
+          missions: p.missions.map((pm, mIdx) => {
+            if (mIdx !== slotIdx) return pm
+            return { ...pm, mission_id: dragSource.mission.id, missions: { text: dragSource.mission.text } }
+          })
         }
+      })
+      setLocalAssignments(next)
+      setHasUnsavedChanges(true)
+    } else if (dragSource.type === 'participant') {
+      const srcPIdx = dragSource.participantIdx
+      if (srcPIdx === targetPIdx) {
+        setDragSource(null)
+        return // Dropped on same player — no-op
+      }
+
+      const srcMission = base[srcPIdx].missions[dragSource.missionIdx]
+      if (!srcMission?.mission_id) {
+        setDragSource(null)
+        return
+      }
+
+      // Move: add to target, remove from source
+      // Target gets the mission added (as extra), source loses it
+      const next = base.map((p, pIdx) => {
         if (pIdx === srcPIdx) {
           return {
             ...p,
             missions: p.missions.map((pm, mIdx) => {
-              if (mIdx === srcMIdx) return { ...pm, mission_id: tgtMission.mission_id, missions: tgtMission.missions }
+              if (mIdx === dragSource.missionIdx) return { ...pm, mission_id: null, missions: null }
               return pm
             })
           }
         }
         if (pIdx === targetPIdx) {
+          // Add the mission as a new entry
           return {
             ...p,
-            missions: p.missions.map((pm, mIdx) => {
-              if (mIdx === targetMIdx) return { ...pm, mission_id: srcMission.mission_id, missions: srcMission.missions }
-              return pm
-            })
+            missions: [
+              ...p.missions,
+              {
+                id: `moved-${Date.now()}`,
+                mission_id: srcMission.mission_id,
+                missions: srcMission.missions,
+                completed: false,
+                completed_at: null,
+                _originalMissionId: null,
+              }
+            ]
           }
         }
         return p
       })
-      setLocalAssignments(next)
+
+      // Rebalance: target has too many, source has too few — fix both
+      const rebalanced = rebalanceAssignments(next, [srcMission.mission_id])
+      setLocalAssignments(rebalanced)
       setHasUnsavedChanges(true)
     }
 
@@ -544,8 +724,21 @@ export default function EventDetail() {
     setDropTarget(null)
     if (!dragSource || dragSource.type !== 'participant') return
 
-    // Unassign the mission (move it back to the pool)
-    handleUnassign(dragSource.participantIdx, dragSource.missionIdx)
+    // Unassign the mission (move it back to the pool), then rebalance
+    const base = ensureLocalAssignments()
+    const next = base.map((p, pIdx) => {
+      if (pIdx !== dragSource.participantIdx) return p
+      return {
+        ...p,
+        missions: p.missions.map((pm, mIdx) => {
+          if (mIdx !== dragSource.missionIdx) return pm
+          return { ...pm, mission_id: null, missions: null }
+        })
+      }
+    })
+    const rebalanced = rebalanceAssignments(next)
+    setLocalAssignments(rebalanced)
+    setHasUnsavedChanges(true)
     setDragSource(null)
   }
 
@@ -1258,11 +1451,39 @@ export default function EventDetail() {
                     Mission assignments will appear here after the event is created.
                   </p>
                 )}
-                {(localAssignments || missionAssignments).map((participant, pIdx) => (
-                  <div key={participant.id} className="pq-card" style={{ padding: 0, overflow: 'hidden' }}>
+                {(localAssignments || missionAssignments).map((participant, pIdx) => {
+                  const isCardDropTarget = dropTarget?.type === 'playerCard' && dropTarget?.participantIdx === pIdx
+                  return (
+                  <div
+                    key={participant.id}
+                    className="pq-card"
+                    style={{
+                      padding: 0,
+                      overflow: 'hidden',
+                      border: isCardDropTarget ? '2px dashed var(--color-primary)' : undefined,
+                      transition: 'var(--transition-fast)',
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault()
+                      // Only show card-level highlight if dragging from a different player
+                      if (dragSource?.type === 'participant' && dragSource?.participantIdx !== pIdx) {
+                        setDropTarget({ type: 'playerCard', participantIdx: pIdx })
+                      }
+                    }}
+                    onDragLeave={(e) => {
+                      if (!e.currentTarget.contains(e.relatedTarget)) {
+                        setDropTarget(null)
+                      }
+                    }}
+                    onDrop={(e) => handleDropOnPlayerCard(e, pIdx)}
+                  >
                     <div
                       className="px-4 py-3 flex items-center gap-3"
-                      style={{ borderBottom: '1px solid var(--color-border-light)' }}
+                      style={{
+                        borderBottom: '1px solid var(--color-border-light)',
+                        background: isCardDropTarget ? 'var(--color-primary-subtle)' : 'transparent',
+                        transition: 'var(--transition-fast)',
+                      }}
                     >
                       <div
                         className="pq-avatar pq-avatar-sm"
@@ -1280,6 +1501,11 @@ export default function EventDetail() {
                       >
                         {participant.name}
                       </h4>
+                      {isCardDropTarget && (
+                        <span style={{ marginLeft: 'auto', fontFamily: 'var(--font-body)', fontSize: '0.75rem', color: 'var(--color-primary)', fontWeight: 600 }}>
+                          Drop to move here
+                        </span>
+                      )}
                     </div>
                     <div>
                       {participant.missions.map((pm, mIdx) => {
@@ -1293,9 +1519,9 @@ export default function EventDetail() {
                             draggable={canDrag && !isEnded}
                             onDragStart={canDrag ? (e) => handleDragStartFromParticipant(e, pIdx, mIdx, pm) : undefined}
                             onDragEnd={handleDragEnd}
-                            onDragOver={(e) => handleDragOver(e, 'participant', pIdx, mIdx)}
-                            onDragLeave={handleDragLeave}
-                            onDrop={(e) => handleDropOnParticipant(e, pIdx, mIdx)}
+                            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setDropTarget({ type: 'participant', participantIdx: pIdx, missionIdx: mIdx }) }}
+                            onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDropTarget(null) }}
+                            onDrop={(e) => handleDropOnSlot(e, pIdx, mIdx)}
                             style={{
                               borderBottom: '1px solid var(--color-border-light)',
                               background: isDropHere ? 'var(--color-primary-subtle)' : isSelected ? 'var(--color-primary-subtle)' : 'transparent',
@@ -1395,7 +1621,8 @@ export default function EventDetail() {
                       )}
                     </div>
                   </div>
-                ))}
+                  )
+                })}
               </div>
 
               {/* Mission Pool Sidebar */}
@@ -1490,7 +1717,14 @@ export default function EventDetail() {
         {/* Feed tab */}
         {activeTab === 'feed' && event && (
           <div className="mb-6 animate-fade-in">
-            <ActivityFeed eventId={event.id} feedMode={event.feed_mode || 'secret'} showPhotos={event.feed_photos_enabled !== false} showComments={event.feed_comments_enabled !== false} />
+            <ActivityFeed
+              eventId={event.id}
+              feedMode={event.feed_mode || 'secret'}
+              showPhotos={event.feed_photos_enabled !== false}
+              showComments={event.feed_comments_enabled !== false}
+              showReactions={event.feed_reactions_enabled !== false}
+              showInteractiveComments={event.feed_interactive_comments_enabled === true}
+            />
           </div>
         )}
 
