@@ -6,10 +6,13 @@ export default function AuthCallback() {
   const navigate = useNavigate()
 
   useEffect(() => {
+    const redirect = sessionStorage.getItem('pq_auth_redirect') || '/organizer'
+    sessionStorage.removeItem('pq_auth_redirect')
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
         sessionStorage.removeItem('pq_signed_out')
-        navigate('/organizer', { replace: true })
+        navigate(redirect, { replace: true })
       } else {
         // Wait for the auth state change from the URL hash
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -17,7 +20,7 @@ export default function AuthCallback() {
             if (event === 'SIGNED_IN' && session) {
               sessionStorage.removeItem('pq_signed_out')
               subscription.unsubscribe()
-              navigate('/organizer', { replace: true })
+              navigate(redirect, { replace: true })
             }
           }
         )

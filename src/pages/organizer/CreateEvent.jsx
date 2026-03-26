@@ -220,6 +220,8 @@ export default function CreateEvent() {
         navigate('/organizer')
         return
       }
+      // Save intended destination so AuthCallback can return here
+      sessionStorage.setItem('pq_auth_redirect', window.location.pathname)
       signInWithGoogle()
     }
   }, [user, authLoading])
@@ -1223,21 +1225,23 @@ export default function CreateEvent() {
                                 No active missions in this category.
                               </p>
                             ) : (
-                              missions.map((m) => (
-                                <div
+                              <ol style={{ margin: 0, paddingLeft: '1.75rem', listStyleType: 'decimal' }}>
+                              {missions.map((m) => (
+                                <li
                                   key={m.id}
-                                  className="px-4 py-1.5"
                                   style={{
                                     fontFamily: 'var(--font-body)',
                                     fontSize: '0.8rem',
                                     color: 'var(--color-text-secondary)',
                                     lineHeight: 1.4,
+                                    padding: '0.25rem 0.5rem',
                                     borderBottom: '1px solid var(--color-border-light)',
                                   }}
                                 >
                                   {m.text}
-                                </div>
-                              ))
+                                </li>
+                              ))}
+                            </ol>
                             )}
                           </div>
                         )}
