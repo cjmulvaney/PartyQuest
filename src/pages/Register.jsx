@@ -129,8 +129,42 @@ export default function Register() {
     const { data: missions } = await query
     if (!missions || missions.length === 0) return
 
-    const shuffled = [...missions].sort(() => Math.random() - 0.5)
-    const selected = shuffled.slice(0, config.mission_count)
+    // Get existing assignment counts across all participants in this event
+    // so we can use leveled round-robin (least-assigned missions first)
+    const { data: allEventParticipants } = await supabase
+      .from('participants')
+      .select('id')
+      .eq('event_id', event.id)
+      .eq('is_active', true)
+
+    const eventParticipantIds = (allEventParticipants || []).map((p) => p.id)
+
+    const assignmentCounts = {}
+    missions.forEach((m) => (assignmentCounts[m.id] = 0))
+
+    if (eventParticipantIds.length > 0) {
+      const { data: existingAssignments } = await supabase
+        .from('participant_missions')
+        .select('mission_id')
+        .in('participant_id', eventParticipantIds)
+
+      if (existingAssignments) {
+        existingAssignments.forEach((a) => {
+          if (assignmentCounts[a.mission_id] !== undefined) {
+            assignmentCounts[a.mission_id]++
+          }
+        })
+      }
+    }
+
+    // Leveled round-robin: sort by least-assigned, shuffle within same count
+    const sorted = [...missions].sort((a, b) => {
+      const diff = (assignmentCounts[a.id] || 0) - (assignmentCounts[b.id] || 0)
+      if (diff !== 0) return diff
+      return Math.random() - 0.5
+    })
+
+    const selected = sorted.slice(0, config.mission_count)
 
     const rows = selected.map((m) => ({
       participant_id: participant.id,

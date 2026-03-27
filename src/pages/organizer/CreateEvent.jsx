@@ -36,7 +36,7 @@ export default function CreateEvent() {
   const [endTime, setEndTime] = useState('')
 
   // Step 2 — Game Setup (Participants + Missions)
-  const [participantCount, setParticipantCount] = useState(10)
+  const [maxParticipants, setMaxParticipants] = useState(25)
   const [participantNames, setParticipantNames] = useState('')
   const [anonymityEnabled, setAnonymityEnabled] = useState(false)
   const [feedMode, setFeedMode] = useState('secret')
@@ -134,8 +134,12 @@ export default function CreateEvent() {
         .eq('is_active', true)
         .order('name')
       if (parts && parts.length > 0) {
-        setParticipantCount(parts.length)
         setParticipantNames(parts.map(p => p.name).join('\n'))
+      }
+      if (data.max_participants) {
+        setMaxParticipants(data.max_participants)
+      } else {
+        setMaxParticipants(null)
       }
     }
     loadEvent()
@@ -277,7 +281,6 @@ export default function CreateEvent() {
         return 'End time must be after start time.'
     }
     if (s === 2) {
-      if (participantCount < 1) return 'At least 1 participant is required.'
       if (selectedTags.length === 0)
         return 'Select at least one mission category.'
       if (unlockType === 'timed') {
@@ -313,22 +316,17 @@ export default function CreateEvent() {
     const code = generateCode(6)
     setEventCode(code)
 
-    // Parse names
+    // Parse names — only create participants for names actually entered
     const names = participantNames
       .split(/[\n,]/)
       .map((n) => n.trim())
       .filter(Boolean)
 
-    // Fill remaining slots with unnamed participants
-    const totalSlots = Math.max(participantCount, names.length)
-    const participants = []
-    for (let i = 0; i < totalSlots; i++) {
-      participants.push({
-        name: names[i] || `Participant ${i + 1}`,
-        accessCode: generateCode(6),
-        isNamed: !!names[i],
-      })
-    }
+    const participants = names.map((name) => ({
+      name,
+      accessCode: generateCode(6),
+      isNamed: true,
+    }))
     setGeneratedParticipants(participants)
   }
 
@@ -374,6 +372,7 @@ export default function CreateEvent() {
         start_time: new Date(startTime).toISOString(),
         end_time: new Date(endTime).toISOString(),
         event_code: eventCode,
+        max_participants: maxParticipants,
         anonymity_enabled: anonymityEnabled,
         feed_mode: feedMode,
         feed_photos_enabled: feedPhotosEnabled,
@@ -443,22 +442,41 @@ export default function CreateEvent() {
 
         if (configError) throw configError
 
-        // Insert participants
-        const participantRows = generatedParticipants.map((p) => ({
-          event_id: eventData.id,
-          name: p.name,
-          access_code: p.accessCode,
-        }))
+        // Insert named participants (if any)
+        let allParticipants = []
 
-        const { data: insertedParticipants, error: partError } = await supabase
+        if (generatedParticipants.length > 0) {
+          const participantRows = generatedParticipants.map((p) => ({
+            event_id: eventData.id,
+            name: p.name,
+            access_code: p.accessCode,
+          }))
+
+          const { data: insertedParticipants, error: partError } = await supabase
+            .from('participants')
+            .insert(participantRows)
+            .select()
+
+          if (partError) throw partError
+          allParticipants = insertedParticipants
+        }
+
+        // Also pick up any self-registered participants who joined before launch
+        const { data: earlyRegistrants } = await supabase
           .from('participants')
-          .insert(participantRows)
-          .select()
+          .select('*')
+          .eq('event_id', eventData.id)
+          .eq('is_active', true)
+          .eq('source', 'self')
 
-        if (partError) throw partError
+        if (earlyRegistrants && earlyRegistrants.length > 0) {
+          allParticipants = [...allParticipants, ...earlyRegistrants]
+        }
 
-        // Assign missions to each participant
-        await assignMissionsToAll(insertedParticipants, eventData.id)
+        // Assign missions to all participants (named + early self-registered)
+        if (allParticipants.length > 0) {
+          await assignMissionsToAll(allParticipants, eventData.id)
+        }
 
         setCreatedEventId(eventData.id)
         setLaunched(true)
@@ -484,8 +502,24 @@ export default function CreateEvent() {
     const { data: missions } = await query
     if (!missions || missions.length === 0) return
 
-    // Shuffle missions
-    const shuffled = [...missions].sort(() => Math.random() - 0.5)
+    // Get existing assignment counts for this event (in case some participants
+    // self-registered early and already have missions, or for future shared missions)
+    const participantIds = participants.map((p) => p.id)
+    const { data: existingAssignments } = await supabase
+      .from('participant_missions')
+      .select('mission_id')
+      .in('participant_id', participantIds)
+
+    // Build assignment count map across ALL event participants
+    const assignmentCounts = {}
+    missions.forEach((m) => (assignmentCounts[m.id] = 0))
+    if (existingAssignments) {
+      existingAssignments.forEach((a) => {
+        if (assignmentCounts[a.mission_id] !== undefined) {
+          assignmentCounts[a.mission_id]++
+        }
+      })
+    }
 
     // Build unlock schedule
     const schedule =
@@ -495,19 +529,30 @@ export default function CreateEvent() {
             .map((t) => new Date(t).toISOString())
         : null
 
-    // Track assignment counts for uniqueness
-    const assignmentCounts = {}
-    missions.forEach((m) => (assignmentCounts[m.id] = 0))
-
     const allRows = []
 
     for (const participant of participants) {
-      // Sort by least assigned for uniqueness
-      const sorted = [...shuffled].sort(
-        (a, b) => (assignmentCounts[a.id] || 0) - (assignmentCounts[b.id] || 0)
-      )
+      // Check if this participant already has missions (self-registered early)
+      const { data: existingMissions } = await supabase
+        .from('participant_missions')
+        .select('mission_id')
+        .eq('participant_id', participant.id)
 
-      const selected = sorted.slice(0, missionCount)
+      const alreadyAssigned = new Set(
+        (existingMissions || []).map((m) => m.mission_id)
+      )
+      const needed = missionCount - alreadyAssigned.size
+      if (needed <= 0) continue
+
+      // Leveled round-robin: sort by least-assigned, shuffle within same count
+      const eligible = missions.filter((m) => !alreadyAssigned.has(m.id))
+      const sorted = [...eligible].sort((a, b) => {
+        const diff = (assignmentCounts[a.id] || 0) - (assignmentCounts[b.id] || 0)
+        if (diff !== 0) return diff
+        return Math.random() - 0.5 // shuffle within same level
+      })
+
+      const selected = sorted.slice(0, needed)
 
       selected.forEach((m, i) => {
         assignmentCounts[m.id] = (assignmentCounts[m.id] || 0) + 1
@@ -545,8 +590,6 @@ export default function CreateEvent() {
     copyWithToast(text, 'All codes copied!', 'allCodes')
   }
 
-  const totalMissionsNeeded = participantCount * missionCount
-  const poolTooSmall = availableMissionCount < totalMissionsNeeded
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
@@ -813,7 +856,7 @@ export default function CreateEvent() {
                 </p>
               </div>
 
-              {/* Pre-register names card */}
+              {/* Max headcount */}
               <div
                 style={{
                   borderRadius: 'var(--radius-lg)',
@@ -822,35 +865,32 @@ export default function CreateEvent() {
                   padding: '1.25rem',
                 }}
               >
-                <div className="mb-4">
-                  <h4 style={{ fontFamily: 'var(--font-heading)', fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-text)', marginBottom: '0.25rem' }}>
-                    Option B: Add names now
-                  </h4>
-                  <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.8rem', color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
-                    If you already know who's coming, add their names and you'll get individual access codes to hand out.
-                  </p>
-                </div>
-
                 <div className="flex flex-col gap-4">
                   <div>
                     <label
                       className="block mb-1.5"
                       style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}
                     >
-                      Expected headcount
+                      Max number of participants
                     </label>
-                    <input
-                      type="number"
-                      value={participantCount}
-                      onChange={(e) =>
-                        setParticipantCount(
-                          Math.max(1, parseInt(e.target.value) || 1)
-                        )
-                      }
-                      min={1}
-                      max={200}
+                    <select
+                      value={maxParticipants === null ? 'none' : maxParticipants}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        setMaxParticipants(val === 'none' ? null : parseInt(val))
+                      }}
                       className="pq-input w-full"
-                    />
+                    >
+                      <option value={10}>10</option>
+                      <option value={15}>15</option>
+                      <option value={25}>25</option>
+                      <option value={50}>50</option>
+                      <option value={75}>75</option>
+                      <option value="none">No Limit</option>
+                    </select>
+                    <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.375rem' }}>
+                      Guests can join via invite link up to this limit.
+                    </p>
                   </div>
 
                   <div>
@@ -858,7 +898,7 @@ export default function CreateEvent() {
                       className="block mb-1.5"
                       style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}
                     >
-                      Names (optional)
+                      Pre-register names (optional)
                     </label>
                     <textarea
                       ref={textareaRef}
@@ -870,7 +910,7 @@ export default function CreateEvent() {
                       className="pq-input w-full"
                     />
                     <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.375rem' }}>
-                      One per line. Any unnamed slots can be filled via invite link later.
+                      One per line. These guests get access codes at launch. Everyone else joins via invite link.
                     </p>
                   </div>
                 </div>
@@ -1193,27 +1233,21 @@ export default function CreateEvent() {
                       style={{
                         fontFamily: 'var(--font-body)',
                         fontSize: '0.75rem',
-                        background: poolTooSmall && availableMissionCount > 0
-                          ? 'var(--color-warning-light)'
-                          : availableMissionCount === 0
-                            ? 'var(--color-danger-light)'
-                            : 'var(--color-success-light)',
-                        color: poolTooSmall && availableMissionCount > 0
-                          ? 'var(--color-warning)'
-                          : availableMissionCount === 0
-                            ? 'var(--color-danger)'
-                            : 'var(--color-success)',
+                        background: availableMissionCount === 0
+                          ? 'var(--color-danger-light)'
+                          : 'var(--color-success-light)',
+                        color: availableMissionCount === 0
+                          ? 'var(--color-danger)'
+                          : 'var(--color-success)',
                         border: 'none',
                       }}
                     >
-                      {participantCount} guests x {missionCount} each = {totalMissionsNeeded} needed
+                      {missionCount} missions per guest
                     </span>
                   </div>
-                  {poolTooSmall && availableMissionCount > 0 && (
-                    <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.8rem', color: 'var(--color-warning)', marginTop: '0.375rem' }}>
-                      Some missions will be shared between participants.
-                    </p>
-                  )}
+                  <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '0.375rem' }}>
+                    Missions are distributed evenly. When all missions have been assigned once, they cycle again.
+                  </p>
                   {availableMissionCount === 0 && (
                     <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.8rem', color: 'var(--color-danger)', marginTop: '0.375rem' }}>
                       No missions match your selected categories.
@@ -1461,7 +1495,8 @@ export default function CreateEvent() {
                         ['Type', eventType],
                         ['Start', new Date(startTime).toLocaleString()],
                         ['End', new Date(endTime).toLocaleString()],
-                        ['Participants', generatedParticipants.length],
+                        ['Max participants', maxParticipants || 'No Limit'],
+                        ['Pre-registered', generatedParticipants.length || 'None'],
                         ['Missions each', missionCount],
                         ['Unlock', unlockType === 'all_at_once' ? 'All at once' : 'Timed release'],
                       ].map(([label, value]) => (
@@ -1517,59 +1552,71 @@ export default function CreateEvent() {
 
                 {/* Participant Codes */}
                 <div className="pq-card" style={{ padding: '1.5rem 2rem' }}>
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, color: 'var(--color-text)', fontSize: '1rem' }}>
-                      Access Codes
-                    </h3>
-                    <button
-                      onClick={copyAllCodes}
-                      className="pq-btn pq-btn-ghost"
-                      style={{
-                        fontFamily: 'var(--font-body)',
-                        fontSize: '0.8rem',
-                        fontWeight: 600,
-                        color: copiedKey === 'allCodes' ? 'var(--color-success)' : 'var(--color-primary)',
-                      }}
-                    >
-                      {copiedKey === 'allCodes' ? '\u2713 Copied!' : 'Copy All'}
-                    </button>
-                  </div>
-                  <div style={{ maxHeight: '280px', overflowY: 'auto' }}>
-                    {generatedParticipants.map((p, i) => (
-                      <div
-                        key={i}
-                        className="flex items-center justify-between py-2 px-2"
-                        style={{
-                          borderBottom: i < generatedParticipants.length - 1 ? '1px solid var(--color-border-light)' : 'none',
-                          borderRadius: 'var(--radius-sm)',
-                        }}
-                      >
-                        <span
-                          className="truncate mr-4"
+                  {generatedParticipants.length > 0 ? (
+                    <>
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, color: 'var(--color-text)', fontSize: '1rem' }}>
+                          Pre-registered Access Codes
+                        </h3>
+                        <button
+                          onClick={copyAllCodes}
+                          className="pq-btn pq-btn-ghost"
                           style={{
                             fontFamily: 'var(--font-body)',
-                            fontSize: '0.875rem',
-                            color: p.isNamed ? 'var(--color-text)' : 'var(--color-text-muted)',
-                            fontStyle: p.isNamed ? 'normal' : 'italic',
-                          }}
-                        >
-                          {p.name}
-                        </span>
-                        <span
-                          style={{
-                            fontFamily: 'monospace',
-                            fontSize: '0.875rem',
+                            fontSize: '0.8rem',
                             fontWeight: 600,
-                            color: 'var(--color-text)',
-                            letterSpacing: '0.1em',
-                            flexShrink: 0,
+                            color: copiedKey === 'allCodes' ? 'var(--color-success)' : 'var(--color-primary)',
                           }}
                         >
-                          {p.accessCode}
-                        </span>
+                          {copiedKey === 'allCodes' ? '\u2713 Copied!' : 'Copy All'}
+                        </button>
                       </div>
-                    ))}
-                  </div>
+                      <div style={{ maxHeight: '280px', overflowY: 'auto' }}>
+                        {generatedParticipants.map((p, i) => (
+                          <div
+                            key={i}
+                            className="flex items-center justify-between py-2 px-2"
+                            style={{
+                              borderBottom: i < generatedParticipants.length - 1 ? '1px solid var(--color-border-light)' : 'none',
+                              borderRadius: 'var(--radius-sm)',
+                            }}
+                          >
+                            <span
+                              className="truncate mr-4"
+                              style={{
+                                fontFamily: 'var(--font-body)',
+                                fontSize: '0.875rem',
+                                color: 'var(--color-text)',
+                              }}
+                            >
+                              {p.name}
+                            </span>
+                            <span
+                              style={{
+                                fontFamily: 'monospace',
+                                fontSize: '0.875rem',
+                                fontWeight: 600,
+                                color: 'var(--color-text)',
+                                letterSpacing: '0.1em',
+                                flexShrink: 0,
+                              }}
+                            >
+                              {p.accessCode}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-center py-4">
+                      <h3 style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, color: 'var(--color-text)', fontSize: '1rem', marginBottom: '0.5rem' }}>
+                        No Pre-registered Guests
+                      </h3>
+                      <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
+                        All guests will join via the invite link. Share the event code after launch.
+                      </p>
+                    </div>
+                  )}
                 </div>
               </>
             )}
@@ -1624,7 +1671,7 @@ export default function CreateEvent() {
                       {eventName}
                     </h3>
                     <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                      {generatedParticipants[0]?.isNamed ? generatedParticipants[0].name : 'Your Guest'}'s Missions
+                      {generatedParticipants[0]?.name || 'Your Guest'}'s Missions
                     </p>
 
                     {/* Progress bar */}
