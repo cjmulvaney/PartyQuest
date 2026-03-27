@@ -120,8 +120,10 @@ export default function CreateEvent() {
       setFeedCommentsEnabled(data.feed_comments_enabled !== false)
       setFeedReactionsEnabled(data.feed_reactions_enabled !== false)
       setFeedInteractiveCommentsEnabled(data.feed_interactive_comments_enabled === true)
-      if (data.event_config?.[0]) {
-        const config = data.event_config[0]
+      const config = Array.isArray(data.event_config)
+        ? data.event_config[0]
+        : data.event_config
+      if (config) {
         setMissionCount(config.mission_count || 3)
         setUnlockType(config.unlock_type || 'all_at_once')
         if (config.tag_filters) setSelectedTags(config.tag_filters)
