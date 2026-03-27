@@ -44,6 +44,7 @@ export default function CreateEvent() {
   const [feedCommentsEnabled, setFeedCommentsEnabled] = useState(true)
   const [feedReactionsEnabled, setFeedReactionsEnabled] = useState(true)
   const [feedInteractiveCommentsEnabled, setFeedInteractiveCommentsEnabled] = useState(false)
+  const [feedHidden, setFeedHidden] = useState(false)
   const [showAdvancedFeed, setShowAdvancedFeed] = useState(false)
 
   const [missionCount, setMissionCount] = useState(3)
@@ -120,6 +121,7 @@ export default function CreateEvent() {
       setFeedCommentsEnabled(data.feed_comments_enabled !== false)
       setFeedReactionsEnabled(data.feed_reactions_enabled !== false)
       setFeedInteractiveCommentsEnabled(data.feed_interactive_comments_enabled === true)
+      setFeedHidden(data.feed_hidden === true)
       const config = Array.isArray(data.event_config)
         ? data.event_config[0]
         : data.event_config
@@ -381,6 +383,7 @@ export default function CreateEvent() {
         feed_comments_enabled: feedCommentsEnabled,
         feed_reactions_enabled: feedReactionsEnabled,
         feed_interactive_comments_enabled: feedInteractiveCommentsEnabled,
+        feed_hidden: feedHidden,
         how_heard: howHeard || null,
         email_opt_in: emailOptIn,
         organizer_email: emailOptIn ? organizerEmail : null,
@@ -491,17 +494,26 @@ export default function CreateEvent() {
   }
 
   async function assignMissionsToAll(participants, eventId) {
-    // Get eligible missions
-    let query = supabase
-      .from('missions')
-      .select('id')
-      .eq('active', true)
+    // Get eligible missions — try with tag filter first, fallback to all
+    let missions = null
 
     if (selectedTags.length > 0) {
-      query = query.in('category_id', selectedTags)
+      const { data } = await supabase
+        .from('missions')
+        .select('id')
+        .eq('active', true)
+        .in('category_id', selectedTags)
+      missions = data
     }
 
-    const { data: missions } = await query
+    if (!missions || missions.length === 0) {
+      const { data } = await supabase
+        .from('missions')
+        .select('id')
+        .eq('active', true)
+      missions = data
+    }
+
     if (!missions || missions.length === 0) return
 
     // Get existing assignment counts for this event (in case some participants
@@ -794,7 +806,16 @@ export default function CreateEvent() {
                   <input
                     type="datetime-local"
                     value={startTime}
-                    onChange={(e) => setStartTime(e.target.value)}
+                    onChange={(e) => {
+                      const newStart = e.target.value
+                      setStartTime(newStart)
+                      // Auto-adjust end date to 4 hours after new start
+                      if (newStart) {
+                        const startDate = new Date(newStart)
+                        const newEnd = new Date(startDate.getTime() + 4 * 60 * 60 * 1000)
+                        setEndTime(formatDateTimeLocal(newEnd))
+                      }
+                    }}
                     className="pq-input w-full"
                   />
                 </div>
@@ -896,11 +917,17 @@ export default function CreateEvent() {
                   </div>
 
                   <div>
+                    <h4 style={{ fontFamily: 'var(--font-heading)', fontSize: '0.875rem', fontWeight: 700, color: 'var(--color-primary)', marginBottom: '0.25rem' }}>
+                      Option B: Pre-register participants
+                    </h4>
+                    <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.8rem', color: 'var(--color-text-secondary)', lineHeight: 1.5, marginBottom: '0.75rem' }}>
+                      If you know the names of all (or some) participants at this event, you can input them below and they will be added to your event.
+                    </p>
                     <label
                       className="block mb-1.5"
                       style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}
                     >
-                      Pre-register names (optional)
+                      Participant names (optional)
                     </label>
                     <textarea
                       ref={textareaRef}
@@ -1257,6 +1284,26 @@ export default function CreateEvent() {
                   )}
                 </div>
               </div>
+            </div>
+
+            {/* --- Hide Feed Toggle --- */}
+            <div className="pq-card" style={{ padding: '1.25rem 2rem' }}>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={feedHidden}
+                  onChange={(e) => setFeedHidden(e.target.checked)}
+                  style={{ accentColor: 'var(--color-primary)', width: '18px', height: '18px' }}
+                />
+                <div>
+                  <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}>
+                    Hide activity feed during the event
+                  </span>
+                  <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.25rem', lineHeight: 1.4 }}>
+                    Participants and spectators won't see the feed tab. Useful if you want to keep completions private until the event ends.
+                  </p>
+                </div>
+              </label>
             </div>
 
             {/* --- Advanced: Activity Feed Settings (collapsible) --- */}
@@ -1884,44 +1931,6 @@ export default function CreateEvent() {
               >
                 {eventCode}
               </p>
-            </div>
-
-            {/* Next steps */}
-            <div className="pq-card" style={{ padding: '1.75rem 2rem' }}>
-              <h3 style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, color: 'var(--color-text)', marginBottom: '1rem', fontSize: '1.125rem' }}>
-                Next steps
-              </h3>
-              <div className="flex flex-col gap-4">
-                {[
-                  { done: true, title: 'Share the invite link', desc: 'from the event page, copy the link or QR code and send it to your guests' },
-                  { done: false, title: 'Or hand out access codes', desc: 'if you added names, each person has a unique code on the event page' },
-                  { done: false, title: 'Check the mission assignments', desc: 'use the Missions tab on the event page to preview what each guest got' },
-                  { done: false, title: 'Watch it unfold', desc: 'on event day, open the event page to see the leaderboard and feed update in real time' },
-                ].map((item, i) => (
-                  <div key={i} className="flex items-start gap-3">
-                    <div
-                      className="flex items-center justify-center flex-shrink-0"
-                      style={{
-                        width: '22px',
-                        height: '22px',
-                        borderRadius: 'var(--radius-sm)',
-                        marginTop: '1px',
-                        background: item.done ? 'var(--color-success-light)' : 'var(--color-surface)',
-                        border: item.done ? '1px solid var(--color-success)' : '1px solid var(--color-border)',
-                        color: item.done ? 'var(--color-success)' : 'var(--color-text-muted)',
-                        fontSize: '0.75rem',
-                        fontWeight: 700,
-                      }}
-                    >
-                      {item.done ? '\u2713' : ''}
-                    </div>
-                    <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
-                      <span style={{ fontWeight: 600, color: 'var(--color-text)' }}>{item.title}</span>
-                      {' -- '}{item.desc}
-                    </p>
-                  </div>
-                ))}
-              </div>
             </div>
 
             {/* Post-launch: How heard + email opt-in */}

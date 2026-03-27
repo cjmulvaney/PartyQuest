@@ -52,6 +52,8 @@ create table events (
   feed_reactions_enabled boolean default true,
   -- V2.3: toggle whether interactive comments are enabled on feed completions
   feed_interactive_comments_enabled boolean default false,
+  -- V2.4: toggle to hide the activity feed entirely during the event
+  feed_hidden boolean default false,
   -- V2.1: max participant count for self-registration (NULL = unlimited)
   max_participants integer,
   created_at timestamptz default now()

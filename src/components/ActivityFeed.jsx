@@ -440,7 +440,7 @@ export default function ActivityFeed({
   feedMode = 'secret',
   showPhotos = true,
   showComments = true,
-  showReactions = false,
+  showReactions = true,
   showInteractiveComments = false,
   participantId = null,
 }) {

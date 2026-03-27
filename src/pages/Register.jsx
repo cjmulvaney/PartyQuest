@@ -117,16 +117,27 @@ export default function Register() {
   }
 
   async function assignMissions(participant, config) {
-    let query = supabase
-      .from('missions')
-      .select('id')
-      .eq('active', true)
+    // Try with tag filters first, fallback to all missions if none match
+    let missions = null
 
     if (config.tag_filters?.length > 0) {
-      query = query.in('category_id', config.tag_filters)
+      const { data } = await supabase
+        .from('missions')
+        .select('id')
+        .eq('active', true)
+        .in('category_id', config.tag_filters)
+      missions = data
     }
 
-    const { data: missions } = await query
+    // Fallback: if no missions matched the tag filter, try all active missions
+    if (!missions || missions.length === 0) {
+      const { data } = await supabase
+        .from('missions')
+        .select('id')
+        .eq('active', true)
+      missions = data
+    }
+
     if (!missions || missions.length === 0) return
 
     // Get existing assignment counts across all participants in this event
@@ -158,6 +169,8 @@ export default function Register() {
     }
 
     // Leveled round-robin: sort by least-assigned, shuffle within same count
+    // This ensures missions are always assigned even when the pool has been
+    // fully distributed — it just picks the least-assigned missions again
     const sorted = [...missions].sort((a, b) => {
       const diff = (assignmentCounts[a.id] || 0) - (assignmentCounts[b.id] || 0)
       if (diff !== 0) return diff

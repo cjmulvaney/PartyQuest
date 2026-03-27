@@ -20,7 +20,7 @@ export default function Spectator() {
 
     const { data, error: fetchError } = await supabase
       .from('events')
-      .select('id, name, anonymity_enabled, status, feed_mode, feed_photos_enabled, feed_comments_enabled')
+      .select('id, name, anonymity_enabled, status, feed_mode, feed_photos_enabled, feed_comments_enabled, feed_reactions_enabled, feed_interactive_comments_enabled, feed_hidden')
       .eq('event_code', eventCode.toUpperCase().trim())
       .in('status', ['active', 'upcoming'])
       .single()
@@ -86,16 +86,18 @@ export default function Spectator() {
             </div>
 
             {/* Activity Feed */}
-            <div>
-              <ActivityFeed
-                eventId={event.id}
-                feedMode={event.feed_mode || 'secret'}
-                showPhotos={event.feed_photos_enabled !== false}
-                showComments={event.feed_comments_enabled !== false}
-                showReactions={event.feed_reactions_enabled !== false}
-                showInteractiveComments={event.feed_interactive_comments_enabled === true}
-              />
-            </div>
+            {!event.feed_hidden && (
+              <div>
+                <ActivityFeed
+                  eventId={event.id}
+                  feedMode={event.feed_mode || 'secret'}
+                  showPhotos={event.feed_photos_enabled !== false}
+                  showComments={event.feed_comments_enabled !== false}
+                  showReactions={event.feed_reactions_enabled !== false}
+                  showInteractiveComments={event.feed_interactive_comments_enabled === true}
+                />
+              </div>
+            )}
           </div>
         </div>
       </div>
