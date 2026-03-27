@@ -1,4 +1,5 @@
 import { Routes, Route } from 'react-router-dom'
+import { Analytics } from '@vercel/analytics/react'
 import { ThemeProvider } from './hooks/useTheme.jsx'
 import Home from './pages/Home.jsx'
 import Join from './pages/Join.jsx'
@@ -38,6 +39,7 @@ export default function App() {
             <Route path="organizers" element={<OrganizersPage />} />
           </Route>
         </Routes>
+        <Analytics />
         <span
           style={{
             position: 'fixed',
