@@ -14,7 +14,7 @@ const EVENT_TYPES = [
 
 const HOW_HEARD_OPTIONS = ['Friend', 'Social media', 'Search', 'Other']
 
-const STEP_LABELS = ['Event Basics', 'Participants', 'Missions', 'Review']
+const STEP_LABELS = ['Event Basics', 'Game Setup', 'Review & Launch']
 
 export default function CreateEvent() {
   const navigate = useNavigate()
@@ -34,11 +34,8 @@ export default function CreateEvent() {
   const [eventType, setEventType] = useState('House Party')
   const [startTime, setStartTime] = useState('')
   const [endTime, setEndTime] = useState('')
-  const [howHeard, setHowHeard] = useState('')
-  const [emailOptIn, setEmailOptIn] = useState(false)
-  const [organizerEmail, setOrganizerEmail] = useState('')
 
-  // Step 2 — Participants
+  // Step 2 — Game Setup (Participants + Missions)
   const [participantCount, setParticipantCount] = useState(10)
   const [participantNames, setParticipantNames] = useState('')
   const [anonymityEnabled, setAnonymityEnabled] = useState(false)
@@ -47,8 +44,8 @@ export default function CreateEvent() {
   const [feedCommentsEnabled, setFeedCommentsEnabled] = useState(true)
   const [feedReactionsEnabled, setFeedReactionsEnabled] = useState(true)
   const [feedInteractiveCommentsEnabled, setFeedInteractiveCommentsEnabled] = useState(false)
+  const [showAdvancedFeed, setShowAdvancedFeed] = useState(false)
 
-  // Step 3 — Missions
   const [missionCount, setMissionCount] = useState(3)
   const [unlockType, setUnlockType] = useState('all_at_once')
   const [unlockTimes, setUnlockTimes] = useState(['', ''])
@@ -59,11 +56,20 @@ export default function CreateEvent() {
   const [categoryMissions, setCategoryMissions] = useState({})
   const [categoryMissionCounts, setCategoryMissionCounts] = useState({})
 
-  // Step 4 — Generated data
+  // Step 3 — Review & Launch
   const [eventCode, setEventCode] = useState('')
   const [generatedParticipants, setGeneratedParticipants] = useState([])
   const [launched, setLaunched] = useState(false)
   const [createdEventId, setCreatedEventId] = useState(null)
+  const [reviewTab, setReviewTab] = useState('summary')
+  const [previewMissions, setPreviewMissions] = useState([])
+  const [previewLoading, setPreviewLoading] = useState(false)
+
+  // Post-launch fields (moved from Step 1)
+  const [howHeard, setHowHeard] = useState('')
+  const [emailOptIn, setEmailOptIn] = useState(false)
+  const [organizerEmail, setOrganizerEmail] = useState('')
+
   // Copy toast
   const [copyToast, setCopyToast] = useState('')
   const [copiedKey, setCopiedKey] = useState('')
@@ -213,6 +219,26 @@ export default function CreateEvent() {
     countMissions()
   }, [selectedTags])
 
+  // Auto-fill timed unlock slots when switching to timed release
+  useEffect(() => {
+    if (unlockType === 'timed' && startTime && endTime) {
+      const hasAnyFilled = unlockTimes.some((t) => t.trim() !== '')
+      if (!hasAnyFilled) {
+        const start = new Date(startTime)
+        const end = new Date(endTime)
+        const totalMs = end.getTime() - start.getTime()
+        const slots = Math.max(missionCount, 2)
+        const newTimes = []
+        for (let i = 0; i < slots; i++) {
+          const offset = (totalMs * i) / (slots - 1 || 1)
+          const slotTime = new Date(start.getTime() + offset)
+          newTimes.push(formatDateTimeLocal(slotTime))
+        }
+        setUnlockTimes(newTimes)
+      }
+    }
+  }, [unlockType])
+
   // Auth gate
   useEffect(() => {
     if (!authLoading && !user) {
@@ -252,10 +278,8 @@ export default function CreateEvent() {
     }
     if (s === 2) {
       if (participantCount < 1) return 'At least 1 participant is required.'
-    }
-    if (s === 3) {
       if (selectedTags.length === 0)
-        return 'Select at least one category.'
+        return 'Select at least one mission category.'
       if (unlockType === 'timed') {
         const validTimes = unlockTimes.filter((t) => t.trim() !== '')
         if (validTimes.length === 0)
@@ -272,8 +296,9 @@ export default function CreateEvent() {
       return
     }
     setError('')
-    if (step === 3) {
+    if (step === 2) {
       prepareReview()
+      loadPreviewMissions()
     }
     setStep(step + 1)
   }
@@ -305,6 +330,30 @@ export default function CreateEvent() {
       })
     }
     setGeneratedParticipants(participants)
+  }
+
+  async function loadPreviewMissions() {
+    setPreviewLoading(true)
+    try {
+      let query = supabase
+        .from('missions')
+        .select('id, text, category_id, categories(name)')
+        .eq('active', true)
+
+      if (selectedTags.length > 0) {
+        query = query.in('category_id', selectedTags)
+      }
+
+      const { data } = await query.limit(50)
+      if (data && data.length > 0) {
+        // Shuffle and pick missionCount samples
+        const shuffled = [...data].sort(() => Math.random() - 0.5)
+        setPreviewMissions(shuffled.slice(0, missionCount))
+      }
+    } catch (err) {
+      console.error('Failed to load preview missions:', err)
+    }
+    setPreviewLoading(false)
   }
 
   async function handleLaunch() {
@@ -516,9 +565,23 @@ export default function CreateEvent() {
               }
             }}
             className="pq-btn pq-btn-ghost"
-            style={{ fontFamily: 'var(--font-body)' }}
+            style={{ fontFamily: 'var(--font-body)', display: 'flex', alignItems: 'center', gap: '0.375rem' }}
           >
-            {launched ? 'View Event' : step === 1 ? 'Back' : 'Back'}
+            {launched ? 'View Event' : step === 1 ? (
+              <>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M19 12H5" /><polyline points="12 19 5 12 12 5" />
+                </svg>
+                Dashboard
+              </>
+            ) : (
+              <>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M19 12H5" /><polyline points="12 19 5 12 12 5" />
+                </svg>
+                Back
+              </>
+            )}
           </button>
           <h1
             style={{
@@ -681,7 +744,7 @@ export default function CreateEvent() {
                     className="block mb-1.5"
                     style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}
                   >
-                    Start
+                    Start *
                   </label>
                   <input
                     type="datetime-local"
@@ -695,7 +758,7 @@ export default function CreateEvent() {
                     className="block mb-1.5"
                     style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}
                   >
-                    End
+                    End *
                   </label>
                   <input
                     type="datetime-local"
@@ -705,59 +768,15 @@ export default function CreateEvent() {
                   />
                 </div>
               </div>
-
-              {/* How heard */}
-              <div>
-                <label
-                  className="block mb-1.5"
-                  style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}
-                >
-                  How did you hear about Party Quest?
-                </label>
-                <select
-                  value={howHeard}
-                  onChange={(e) => setHowHeard(e.target.value)}
-                  className="pq-input w-full"
-                >
-                  <option value="">-- Optional --</option>
-                  {HOW_HEARD_OPTIONS.map((o) => (
-                    <option key={o} value={o.toLowerCase()}>
-                      {o}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Email opt-in */}
-              <div className="flex flex-col gap-2">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={emailOptIn}
-                    onChange={(e) => setEmailOptIn(e.target.checked)}
-                    style={{ accentColor: 'var(--color-primary)', width: '18px', height: '18px' }}
-                  />
-                  <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>
-                    Send me a post-event summary
-                  </span>
-                </label>
-                {emailOptIn && (
-                  <input
-                    type="email"
-                    value={organizerEmail}
-                    onChange={(e) => setOrganizerEmail(e.target.value)}
-                    placeholder="your@email.com"
-                    className="pq-input w-full"
-                  />
-                )}
-              </div>
             </div>
           </div>
         )}
 
-        {/* Step 2 -- Participants */}
+        {/* Step 2 -- Game Setup (Participants + Missions combined) */}
         {step === 2 && (
           <div className="animate-fade-in flex flex-col gap-5">
+
+            {/* --- Participants Section --- */}
             <div className="pq-card" style={{ padding: '2rem' }}>
               <div className="mb-6">
                 <h2
@@ -769,10 +788,10 @@ export default function CreateEvent() {
                     marginBottom: '0.5rem',
                   }}
                 >
-                  Participants
+                  Game Setup
                 </h2>
                 <p style={{ color: 'var(--color-text-secondary)', fontFamily: 'var(--font-body)', fontSize: '0.875rem', lineHeight: 1.5 }}>
-                  You can add people now, share an invite link later, or both. Don't stress about getting everyone -- you can always add more after the event is created.
+                  Set up your guest list and configure the missions. Don't stress about getting everyone -- you can always add more after the event is created.
                 </p>
               </div>
 
@@ -871,559 +890,909 @@ export default function CreateEvent() {
                   </span>
                 </label>
               </div>
+            </div>
 
-              {/* Feed Settings */}
-              <div className="mt-6 pt-5" style={{ borderTop: '1px solid var(--color-border-light)' }}>
+            {/* --- Missions Section --- */}
+            <div className="pq-card" style={{ padding: '2rem' }}>
+              <div className="mb-6">
                 <h3
                   style={{
                     fontFamily: 'var(--font-heading)',
-                    fontSize: '1rem',
-                    fontWeight: 700,
                     color: 'var(--color-text)',
+                    fontSize: '1.25rem',
+                    fontWeight: 700,
                     marginBottom: '0.5rem',
                   }}
                 >
-                  Activity Feed Settings
+                  Missions
                 </h3>
-                <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: '1rem', lineHeight: 1.5 }}>
-                  Control what participants and spectators see in the live activity feed when missions are completed.
+                <p style={{ color: 'var(--color-text-secondary)', fontFamily: 'var(--font-body)', fontSize: '0.875rem', lineHeight: 1.5 }}>
+                  Choose how many missions each guest gets and how they unlock. Missions are pulled from our library based on the categories you pick.
                 </p>
+              </div>
 
-                {/* Feed mode */}
-                <div className="mb-4">
+              {isEditMode && editEventStatus === 'active' && (
+                <div
+                  className="mb-5"
+                  style={{
+                    background: 'var(--color-warning-light)',
+                    border: '1px solid var(--color-warning)',
+                    borderRadius: 'var(--radius-lg)',
+                    padding: '0.875rem 1rem',
+                    fontFamily: 'var(--font-body)',
+                    fontSize: '0.875rem',
+                    color: 'var(--color-warning)',
+                  }}
+                >
+                  Mission settings cannot be changed while the event is active.
+                </div>
+              )}
+
+              <div className="flex flex-col gap-6">
+                {/* Mission count slider */}
+                <div>
+                  <label
+                    className="block mb-2"
+                    style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}
+                  >
+                    Missions per participant:{' '}
+                    <span style={{ color: 'var(--color-primary)', fontWeight: 700 }}>{missionCount}</span>
+                  </label>
+                  <input
+                    type="range"
+                    min={1}
+                    max={5}
+                    value={missionCount}
+                    onChange={(e) => setMissionCount(parseInt(e.target.value))}
+                    disabled={isEditMode && editEventStatus === 'active'}
+                    className="w-full"
+                    style={{ accentColor: 'var(--color-primary)' }}
+                  />
+                  <div className="flex justify-between mt-1">
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <span key={n} style={{ fontFamily: 'var(--font-body)', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                        {n}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Unlock type */}
+                <div>
                   <label
                     className="block mb-1.5"
                     style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}
                   >
-                    Mission Visibility
+                    Unlock Type
                   </label>
+                  <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: '0.75rem', lineHeight: 1.5 }}>
+                    All at once = guests see every mission from the start. Timed = missions reveal throughout the event to keep things exciting.
+                  </p>
                   <div className="grid grid-cols-2 gap-3">
                     <button
                       type="button"
-                      onClick={() => setFeedMode('secret')}
-                      className={feedMode === 'secret' ? 'pq-btn pq-btn-primary' : 'pq-btn pq-btn-secondary'}
-                      style={{ fontFamily: 'var(--font-body)', padding: '0.75rem 1rem', fontSize: '0.8rem' }}
+                      onClick={() => setUnlockType('all_at_once')}
+                      className={unlockType === 'all_at_once' ? 'pq-btn pq-btn-primary' : 'pq-btn pq-btn-secondary'}
+                      style={{ fontFamily: 'var(--font-body)', padding: '0.75rem 1rem' }}
                     >
-                      Secret
+                      All at Once
                     </button>
                     <button
                       type="button"
-                      onClick={() => setFeedMode('transparent')}
-                      className={feedMode === 'transparent' ? 'pq-btn pq-btn-primary' : 'pq-btn pq-btn-secondary'}
-                      style={{ fontFamily: 'var(--font-body)', padding: '0.75rem 1rem', fontSize: '0.8rem' }}
+                      onClick={() => setUnlockType('timed')}
+                      className={unlockType === 'timed' ? 'pq-btn pq-btn-primary' : 'pq-btn pq-btn-secondary'}
+                      style={{ fontFamily: 'var(--font-body)', padding: '0.75rem 1rem' }}
                     >
-                      Show Mission
+                      Timed Release
                     </button>
                   </div>
-                  <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.375rem' }}>
-                    {feedMode === 'secret'
-                      ? 'Feed shows "Completed a mission" without revealing what it was.'
-                      : 'Feed shows the actual mission text that was completed.'}
-                  </p>
                 </div>
 
-                {/* Photo toggle */}
-                <div className="mb-3">
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={feedPhotosEnabled}
-                      onChange={(e) => setFeedPhotosEnabled(e.target.checked)}
-                      style={{ accentColor: 'var(--color-primary)', width: '18px', height: '18px' }}
-                    />
-                    <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>
-                      Show photos in the activity feed
-                    </span>
-                  </label>
-                </div>
-
-                {/* Comments toggle */}
-                <div className="mb-3">
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={feedCommentsEnabled}
-                      onChange={(e) => setFeedCommentsEnabled(e.target.checked)}
-                      style={{ accentColor: 'var(--color-primary)', width: '18px', height: '18px' }}
-                    />
-                    <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>
-                      Show completion notes in the activity feed
-                    </span>
-                  </label>
-                </div>
-
-                {/* Emoji reactions toggle */}
-                <div className="mb-3">
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={feedReactionsEnabled}
-                      onChange={(e) => setFeedReactionsEnabled(e.target.checked)}
-                      style={{ accentColor: 'var(--color-primary)', width: '18px', height: '18px' }}
-                    />
-                    <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>
-                      Allow emoji reactions on completions
-                    </span>
-                  </label>
-                </div>
-
-                {/* Interactive comments toggle */}
-                <div>
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={feedInteractiveCommentsEnabled}
-                      onChange={(e) => setFeedInteractiveCommentsEnabled(e.target.checked)}
-                      style={{ accentColor: 'var(--color-primary)', width: '18px', height: '18px' }}
-                    />
-                    <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>
-                      Allow comments on completions
-                    </span>
-                  </label>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Step 3 -- Missions */}
-        {step === 3 && (
-          <div className="pq-card animate-fade-in" style={{ padding: '2rem' }}>
-            <div className="mb-6">
-              <h2
-                style={{
-                  fontFamily: 'var(--font-heading)',
-                  color: 'var(--color-text)',
-                  fontSize: '1.75rem',
-                  fontWeight: 700,
-                  marginBottom: '0.5rem',
-                }}
-              >
-                Missions
-              </h2>
-              <p style={{ color: 'var(--color-text-secondary)', fontFamily: 'var(--font-body)', fontSize: '0.875rem', lineHeight: 1.5 }}>
-                Choose how many missions each guest gets and how they unlock. Missions are pulled from our library based on the categories you pick.
-              </p>
-            </div>
-
-            {isEditMode && editEventStatus === 'active' && (
-              <div
-                className="mb-5"
-                style={{
-                  background: 'var(--color-warning-light)',
-                  border: '1px solid var(--color-warning)',
-                  borderRadius: 'var(--radius-lg)',
-                  padding: '0.875rem 1rem',
-                  fontFamily: 'var(--font-body)',
-                  fontSize: '0.875rem',
-                  color: 'var(--color-warning)',
-                }}
-              >
-                Mission settings cannot be changed while the event is active.
-              </div>
-            )}
-
-            <div className="flex flex-col gap-6">
-              {/* Mission count slider */}
-              <div>
-                <label
-                  className="block mb-2"
-                  style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}
-                >
-                  Missions per participant:{' '}
-                  <span style={{ color: 'var(--color-primary)', fontWeight: 700 }}>{missionCount}</span>
-                </label>
-                <input
-                  type="range"
-                  min={1}
-                  max={5}
-                  value={missionCount}
-                  onChange={(e) => setMissionCount(parseInt(e.target.value))}
-                  disabled={isEditMode && editEventStatus === 'active'}
-                  className="w-full"
-                  style={{ accentColor: 'var(--color-primary)' }}
-                />
-                <div className="flex justify-between mt-1">
-                  {[1, 2, 3, 4, 5].map((n) => (
-                    <span key={n} style={{ fontFamily: 'var(--font-body)', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                      {n}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              {/* Unlock type */}
-              <div>
-                <label
-                  className="block mb-1.5"
-                  style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}
-                >
-                  Unlock Type
-                </label>
-                <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: '0.75rem', lineHeight: 1.5 }}>
-                  All at once = guests see every mission from the start. Timed = missions reveal throughout the event to keep things exciting.
-                </p>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setUnlockType('all_at_once')}
-                    className={unlockType === 'all_at_once' ? 'pq-btn pq-btn-primary' : 'pq-btn pq-btn-secondary'}
-                    style={{ fontFamily: 'var(--font-body)', padding: '0.75rem 1rem' }}
-                  >
-                    All at Once
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setUnlockType('timed')}
-                    className={unlockType === 'timed' ? 'pq-btn pq-btn-primary' : 'pq-btn pq-btn-secondary'}
-                    style={{ fontFamily: 'var(--font-body)', padding: '0.75rem 1rem' }}
-                  >
-                    Timed Release
-                  </button>
-                </div>
-              </div>
-
-              {/* Timed unlock inputs */}
-              {unlockType === 'timed' && (
-                <div className="flex flex-col gap-3">
-                  <label
-                    className="block"
-                    style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}
-                  >
-                    Unlock Times
-                  </label>
-                  {unlockTimes.map((time, i) => (
-                    <div key={i} className="flex items-center gap-3">
-                      <span
-                        style={{
-                          fontFamily: 'var(--font-body)',
-                          fontSize: '0.8rem',
-                          color: 'var(--color-text-muted)',
-                          minWidth: '48px',
-                        }}
-                      >
-                        Slot {i + 1}
-                      </span>
-                      <input
-                        type="datetime-local"
-                        value={time}
-                        onChange={(e) => {
-                          const updated = [...unlockTimes]
-                          updated[i] = e.target.value
-                          setUnlockTimes(updated)
-                        }}
-                        className="pq-input flex-1"
-                      />
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => setUnlockTimes([...unlockTimes, ''])}
-                    className="pq-btn pq-btn-ghost"
-                    style={{
-                      fontFamily: 'var(--font-body)',
-                      color: 'var(--color-primary)',
-                      fontWeight: 600,
-                      fontSize: '0.875rem',
-                      alignSelf: 'flex-start',
-                    }}
-                  >
-                    + Add unlock time
-                  </button>
-                </div>
-              )}
-
-              {/* Categories — expandable with mission preview */}
-              <div>
-                <label
-                  className="block mb-2"
-                  style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}
-                >
-                  Categories
-                </label>
-                <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: '0.75rem', lineHeight: 1.5 }}>
-                  Check the categories you want to include. Expand any category to preview its missions.
-                </p>
-                <div className="flex flex-col gap-1">
-                  {categories.map((cat) => {
-                    const isSelected = selectedTags.includes(cat.id)
-                    const isExpanded = expandedCategories[cat.id]
-                    const missions = categoryMissions[cat.id]
-                    const count = categoryMissionCounts[cat.id] ?? '...'
-                    return (
-                      <div
-                        key={cat.id}
-                        style={{
-                          borderRadius: 'var(--radius-lg)',
-                          border: isSelected ? '1.5px solid var(--color-primary-light)' : '1px solid var(--color-border-light)',
-                          background: isSelected ? 'var(--color-primary-subtle)' : 'var(--color-surface)',
-                          overflow: 'hidden',
-                          transition: 'var(--transition-fast)',
-                        }}
-                      >
-                        {/* Category header row */}
-                        <div
-                          className="flex items-center gap-3 px-3 py-2.5"
-                          style={{ cursor: 'pointer' }}
+                {/* Timed unlock inputs */}
+                {unlockType === 'timed' && (
+                  <div className="flex flex-col gap-3">
+                    <label
+                      className="block"
+                      style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}
+                    >
+                      Unlock Times
+                    </label>
+                    <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '-0.5rem', lineHeight: 1.4 }}>
+                      Pre-filled evenly across your event. Adjust as needed.
+                    </p>
+                    {unlockTimes.map((time, i) => (
+                      <div key={i} className="flex items-center gap-3">
+                        <span
+                          style={{
+                            fontFamily: 'var(--font-body)',
+                            fontSize: '0.8rem',
+                            color: 'var(--color-text-muted)',
+                            minWidth: '48px',
+                          }}
                         >
-                          {/* Checkbox */}
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => {
-                              setSelectedTags((prev) =>
-                                isSelected
-                                  ? prev.filter((t) => t !== cat.id)
-                                  : [...prev, cat.id]
-                              )
+                          Slot {i + 1}
+                        </span>
+                        <input
+                          type="datetime-local"
+                          value={time}
+                          onChange={(e) => {
+                            const updated = [...unlockTimes]
+                            updated[i] = e.target.value
+                            setUnlockTimes(updated)
+                          }}
+                          className="pq-input flex-1"
+                        />
+                        {unlockTimes.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = unlockTimes.filter((_, idx) => idx !== i)
+                              setUnlockTimes(updated)
                             }}
-                            style={{ accentColor: 'var(--color-primary)', width: '16px', height: '16px', cursor: 'pointer', flexShrink: 0 }}
-                          />
-                          {/* Name + count — click to expand */}
-                          <div
-                            className="flex-1 flex items-center justify-between"
-                            onClick={() => toggleCategoryExpanded(cat.id)}
+                            className="pq-btn pq-btn-ghost"
+                            style={{ padding: '0.375rem', color: 'var(--color-text-muted)', minWidth: 'auto' }}
+                            aria-label="Remove slot"
                           >
-                            <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text)' }}>
-                              {cat.name}
-                            </span>
-                            <div className="flex items-center gap-2">
-                              <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
-                                {count} missions
-                              </span>
-                              <svg
-                                width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                                strokeLinecap="round" strokeLinejoin="round"
-                                style={{
-                                  color: 'var(--color-text-muted)',
-                                  transition: 'transform 0.2s ease',
-                                  transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
-                                }}
-                              >
-                                <polyline points="6 9 12 15 18 9" />
-                              </svg>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Expanded mission list */}
-                        {isExpanded && (
-                          <div
-                            style={{
-                              borderTop: '1px solid var(--color-border-light)',
-                              maxHeight: '200px',
-                              overflowY: 'auto',
-                              padding: '0.375rem 0',
-                            }}
-                          >
-                            {!missions ? (
-                              <div className="flex items-center justify-center py-3">
-                                <div className="pq-spinner" style={{ width: '16px', height: '16px' }} />
-                              </div>
-                            ) : missions.length === 0 ? (
-                              <p className="px-4 py-2" style={{ fontFamily: 'var(--font-body)', fontSize: '0.75rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
-                                No active missions in this category.
-                              </p>
-                            ) : (
-                              <ol style={{ margin: 0, paddingLeft: '1.75rem', listStyleType: 'decimal' }}>
-                              {missions.map((m) => (
-                                <li
-                                  key={m.id}
-                                  style={{
-                                    fontFamily: 'var(--font-body)',
-                                    fontSize: '0.8rem',
-                                    color: 'var(--color-text-secondary)',
-                                    lineHeight: 1.4,
-                                    padding: '0.25rem 0.5rem',
-                                    borderBottom: '1px solid var(--color-border-light)',
-                                  }}
-                                >
-                                  {m.text}
-                                </li>
-                              ))}
-                            </ol>
-                            )}
-                          </div>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                            </svg>
+                          </button>
                         )}
                       </div>
-                    )
-                  })}
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setUnlockTimes([...unlockTimes, ''])}
+                      className="pq-btn pq-btn-ghost"
+                      style={{
+                        fontFamily: 'var(--font-body)',
+                        color: 'var(--color-primary)',
+                        fontWeight: 600,
+                        fontSize: '0.875rem',
+                        alignSelf: 'flex-start',
+                      }}
+                    >
+                      + Add unlock time
+                    </button>
+                  </div>
+                )}
+
+                {/* Categories — expandable with mission preview */}
+                <div>
+                  <label
+                    className="block mb-2"
+                    style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}
+                  >
+                    Categories
+                  </label>
+                  <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: '0.75rem', lineHeight: 1.5 }}>
+                    Check the categories you want to include. Expand any category to preview its missions.
+                  </p>
+                  <div className="flex flex-col gap-1">
+                    {categories.map((cat) => {
+                      const isSelected = selectedTags.includes(cat.id)
+                      const isExpanded = expandedCategories[cat.id]
+                      const missions = categoryMissions[cat.id]
+                      const count = categoryMissionCounts[cat.id] ?? '...'
+                      return (
+                        <div
+                          key={cat.id}
+                          style={{
+                            borderRadius: 'var(--radius-lg)',
+                            border: isSelected ? '1.5px solid var(--color-primary-light)' : '1px solid var(--color-border-light)',
+                            background: isSelected ? 'var(--color-primary-subtle)' : 'var(--color-surface)',
+                            overflow: 'hidden',
+                            transition: 'var(--transition-fast)',
+                          }}
+                        >
+                          {/* Category header row */}
+                          <div
+                            className="flex items-center gap-3 px-3 py-2.5"
+                            style={{ cursor: 'pointer' }}
+                          >
+                            {/* Checkbox */}
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {
+                                setSelectedTags((prev) =>
+                                  isSelected
+                                    ? prev.filter((t) => t !== cat.id)
+                                    : [...prev, cat.id]
+                                )
+                              }}
+                              style={{ accentColor: 'var(--color-primary)', width: '16px', height: '16px', cursor: 'pointer', flexShrink: 0 }}
+                            />
+                            {/* Name + count — click to expand */}
+                            <div
+                              className="flex-1 flex items-center justify-between"
+                              onClick={() => toggleCategoryExpanded(cat.id)}
+                            >
+                              <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text)' }}>
+                                {cat.name}
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
+                                  {count} missions
+                                </span>
+                                <svg
+                                  width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                                  strokeLinecap="round" strokeLinejoin="round"
+                                  style={{
+                                    color: 'var(--color-text-muted)',
+                                    transition: 'transform 0.2s ease',
+                                    transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                                  }}
+                                >
+                                  <polyline points="6 9 12 15 18 9" />
+                                </svg>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Expanded mission list */}
+                          {isExpanded && (
+                            <div
+                              style={{
+                                borderTop: '1px solid var(--color-border-light)',
+                                maxHeight: '200px',
+                                overflowY: 'auto',
+                                padding: '0.375rem 0',
+                              }}
+                            >
+                              {!missions ? (
+                                <div className="flex items-center justify-center py-3">
+                                  <div className="pq-spinner" style={{ width: '16px', height: '16px' }} />
+                                </div>
+                              ) : missions.length === 0 ? (
+                                <p className="px-4 py-2" style={{ fontFamily: 'var(--font-body)', fontSize: '0.75rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                                  No active missions in this category.
+                                </p>
+                              ) : (
+                                <ol style={{ margin: 0, paddingLeft: '1.75rem', listStyleType: 'decimal' }}>
+                                {missions.map((m) => (
+                                  <li
+                                    key={m.id}
+                                    style={{
+                                      fontFamily: 'var(--font-body)',
+                                      fontSize: '0.8rem',
+                                      color: 'var(--color-text-secondary)',
+                                      lineHeight: 1.4,
+                                      padding: '0.25rem 0.5rem',
+                                      borderBottom: '1px solid var(--color-border-light)',
+                                    }}
+                                  >
+                                    {m.text}
+                                  </li>
+                                ))}
+                              </ol>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Mission availability summary with explicit math */}
+                <div
+                  style={{
+                    borderRadius: 'var(--radius-lg)',
+                    background: 'var(--color-surface)',
+                    border: '1px solid var(--color-border-light)',
+                    padding: '1rem 1.25rem',
+                  }}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>
+                      {availableMissionCount} missions available
+                    </p>
+                    <span
+                      className="pq-badge"
+                      style={{
+                        fontFamily: 'var(--font-body)',
+                        fontSize: '0.75rem',
+                        background: poolTooSmall && availableMissionCount > 0
+                          ? 'var(--color-warning-light)'
+                          : availableMissionCount === 0
+                            ? 'var(--color-danger-light)'
+                            : 'var(--color-success-light)',
+                        color: poolTooSmall && availableMissionCount > 0
+                          ? 'var(--color-warning)'
+                          : availableMissionCount === 0
+                            ? 'var(--color-danger)'
+                            : 'var(--color-success)',
+                        border: 'none',
+                      }}
+                    >
+                      {participantCount} guests x {missionCount} each = {totalMissionsNeeded} needed
+                    </span>
+                  </div>
+                  {poolTooSmall && availableMissionCount > 0 && (
+                    <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.8rem', color: 'var(--color-warning)', marginTop: '0.375rem' }}>
+                      Some missions will be shared between participants.
+                    </p>
+                  )}
+                  {availableMissionCount === 0 && (
+                    <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.8rem', color: 'var(--color-danger)', marginTop: '0.375rem' }}>
+                      No missions match your selected categories.
+                    </p>
+                  )}
                 </div>
               </div>
+            </div>
 
-              {/* Mission availability summary */}
-              <div
+            {/* --- Advanced: Activity Feed Settings (collapsible) --- */}
+            <div className="pq-card" style={{ padding: 0, overflow: 'hidden' }}>
+              <button
+                type="button"
+                onClick={() => setShowAdvancedFeed(!showAdvancedFeed)}
+                className="w-full flex items-center justify-between text-left"
                 style={{
-                  borderRadius: 'var(--radius-lg)',
-                  background: 'var(--color-surface)',
-                  border: '1px solid var(--color-border-light)',
-                  padding: '1rem 1.25rem',
+                  padding: '1.25rem 2rem',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
                 }}
               >
-                <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>
-                  {availableMissionCount} missions available for{' '}
-                  {participantCount} participants
-                </p>
-                {poolTooSmall && availableMissionCount > 0 && (
-                  <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.8rem', color: 'var(--color-warning)', marginTop: '0.375rem' }}>
-                    Some missions will be shared between participants.
+                <div className="flex items-center gap-2">
+                  <h3
+                    style={{
+                      fontFamily: 'var(--font-heading)',
+                      fontSize: '1rem',
+                      fontWeight: 700,
+                      color: 'var(--color-text)',
+                      margin: 0,
+                    }}
+                  >
+                    Activity Feed Settings
+                  </h3>
+                  <span
+                    className="pq-badge pq-badge-muted"
+                    style={{ fontSize: '0.65rem', fontFamily: 'var(--font-body)' }}
+                  >
+                    Advanced
+                  </span>
+                </div>
+                <svg
+                  width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                  strokeLinecap="round" strokeLinejoin="round"
+                  style={{
+                    color: 'var(--color-text-muted)',
+                    transition: 'transform 0.2s ease',
+                    transform: showAdvancedFeed ? 'rotate(180deg)' : 'rotate(0deg)',
+                  }}
+                >
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+
+              {showAdvancedFeed && (
+                <div style={{ padding: '0 2rem 2rem 2rem', borderTop: '1px solid var(--color-border-light)' }}>
+                  <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: '1rem', marginTop: '1rem', lineHeight: 1.5 }}>
+                    Control what participants and spectators see in the live activity feed when missions are completed.
                   </p>
-                )}
-                {availableMissionCount === 0 && (
-                  <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.8rem', color: 'var(--color-danger)', marginTop: '0.375rem' }}>
-                    No missions match your selected categories.
-                  </p>
-                )}
-              </div>
+
+                  {/* Feed mode */}
+                  <div className="mb-4">
+                    <label
+                      className="block mb-1.5"
+                      style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}
+                    >
+                      Mission Visibility
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setFeedMode('secret')}
+                        className={feedMode === 'secret' ? 'pq-btn pq-btn-primary' : 'pq-btn pq-btn-secondary'}
+                        style={{ fontFamily: 'var(--font-body)', padding: '0.75rem 1rem', fontSize: '0.8rem' }}
+                      >
+                        Secret
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFeedMode('transparent')}
+                        className={feedMode === 'transparent' ? 'pq-btn pq-btn-primary' : 'pq-btn pq-btn-secondary'}
+                        style={{ fontFamily: 'var(--font-body)', padding: '0.75rem 1rem', fontSize: '0.8rem' }}
+                      >
+                        Show Mission
+                      </button>
+                    </div>
+                    <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.375rem' }}>
+                      {feedMode === 'secret'
+                        ? 'Feed shows "Completed a mission" without revealing what it was.'
+                        : 'Feed shows the actual mission text that was completed.'}
+                    </p>
+                  </div>
+
+                  {/* Photo toggle */}
+                  <div className="mb-3">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={feedPhotosEnabled}
+                        onChange={(e) => setFeedPhotosEnabled(e.target.checked)}
+                        style={{ accentColor: 'var(--color-primary)', width: '18px', height: '18px' }}
+                      />
+                      <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>
+                        Show photos in the activity feed
+                      </span>
+                    </label>
+                  </div>
+
+                  {/* Comments toggle */}
+                  <div className="mb-3">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={feedCommentsEnabled}
+                        onChange={(e) => setFeedCommentsEnabled(e.target.checked)}
+                        style={{ accentColor: 'var(--color-primary)', width: '18px', height: '18px' }}
+                      />
+                      <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>
+                        Show completion notes in the activity feed
+                      </span>
+                    </label>
+                  </div>
+
+                  {/* Emoji reactions toggle */}
+                  <div className="mb-3">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={feedReactionsEnabled}
+                        onChange={(e) => setFeedReactionsEnabled(e.target.checked)}
+                        style={{ accentColor: 'var(--color-primary)', width: '18px', height: '18px' }}
+                      />
+                      <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>
+                        Allow emoji reactions on completions
+                      </span>
+                    </label>
+                  </div>
+
+                  {/* Interactive comments toggle */}
+                  <div>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={feedInteractiveCommentsEnabled}
+                        onChange={(e) => setFeedInteractiveCommentsEnabled(e.target.checked)}
+                        style={{ accentColor: 'var(--color-primary)', width: '18px', height: '18px' }}
+                      />
+                      <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>
+                        Allow comments on completions
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
 
-        {/* Step 4 -- Review & Launch */}
-        {step === 4 && !launched && (
+        {/* Step 3 -- Review & Launch */}
+        {step === 3 && !launched && (
           <div className="animate-fade-in flex flex-col gap-5">
-            <div className="pq-card" style={{ padding: '2rem' }}>
-              <h2
-                style={{
-                  fontFamily: 'var(--font-heading)',
-                  color: 'var(--color-text)',
-                  fontSize: '1.75rem',
-                  fontWeight: 700,
-                  marginBottom: '1.5rem',
-                }}
-              >
-                Review & Launch
-              </h2>
 
-              {/* Event Summary */}
-              <div
-                style={{
-                  borderRadius: 'var(--radius-lg)',
-                  background: 'var(--color-surface)',
-                  border: '1px solid var(--color-border-light)',
-                  padding: '1.25rem',
-                  marginBottom: '1.5rem',
-                }}
-              >
-                <h3 style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, color: 'var(--color-text)', marginBottom: '0.75rem', fontSize: '1rem' }}>
-                  Event Summary
-                </h3>
-                <div className="grid grid-cols-2 gap-x-6 gap-y-2">
-                  {[
-                    ['Name', eventName],
-                    ['Type', eventType],
-                    ['Start', new Date(startTime).toLocaleString()],
-                    ['End', new Date(endTime).toLocaleString()],
-                    ['Participants', generatedParticipants.length],
-                    ['Missions each', missionCount],
-                    ['Unlock', unlockType === 'all_at_once' ? 'All at once' : 'Timed release'],
-                  ].map(([label, value]) => (
-                    <div key={label} className="py-1" style={{ borderBottom: '1px solid var(--color-border-light)' }}>
-                      <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'block' }}>
-                        {label}
-                      </span>
-                      <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', color: 'var(--color-text)', fontWeight: 500 }}>
-                        {value}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-                {anonymityEnabled && (
-                  <div className="mt-3">
-                    <span className="pq-badge pq-badge-warning" style={{ fontFamily: 'var(--font-body)', fontSize: '0.75rem' }}>
-                      Anonymous leaderboard
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Event Code -- prominent card */}
+            {/* Summary / Preview toggle */}
             <div
-              className="pq-card animate-scale-in"
+              className="flex"
               style={{
-                padding: '2rem',
-                textAlign: 'center',
-                background: 'var(--color-primary-subtle)',
-                border: '2px solid var(--color-primary-light)',
+                background: 'var(--color-surface)',
+                borderRadius: 'var(--radius-lg)',
+                border: '1px solid var(--color-border-light)',
+                padding: '4px',
               }}
             >
-              <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-primary)', marginBottom: '0.5rem' }}>
-                Event Code
-              </p>
-              <p
+              <button
+                type="button"
+                onClick={() => setReviewTab('summary')}
                 style={{
+                  flex: 1,
+                  padding: '0.625rem 1rem',
+                  borderRadius: 'var(--radius-md)',
                   fontFamily: 'var(--font-heading)',
-                  fontSize: '2.5rem',
-                  fontWeight: 800,
-                  color: 'var(--color-primary)',
-                  letterSpacing: '0.2em',
-                  lineHeight: 1.2,
+                  fontWeight: 700,
+                  fontSize: '0.875rem',
+                  border: 'none',
+                  cursor: 'pointer',
+                  transition: 'var(--transition-fast)',
+                  background: reviewTab === 'summary' ? 'var(--color-primary)' : 'transparent',
+                  color: reviewTab === 'summary' ? 'var(--color-text-inverse)' : 'var(--color-text-muted)',
                 }}
               >
-                {eventCode}
-              </p>
-              <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginTop: '0.5rem' }}>
-                Participants and spectators use this to join
-              </p>
+                Summary
+              </button>
+              <button
+                type="button"
+                onClick={() => setReviewTab('preview')}
+                style={{
+                  flex: 1,
+                  padding: '0.625rem 1rem',
+                  borderRadius: 'var(--radius-md)',
+                  fontFamily: 'var(--font-heading)',
+                  fontWeight: 700,
+                  fontSize: '0.875rem',
+                  border: 'none',
+                  cursor: 'pointer',
+                  transition: 'var(--transition-fast)',
+                  background: reviewTab === 'preview' ? 'var(--color-primary)' : 'transparent',
+                  color: reviewTab === 'preview' ? 'var(--color-text-inverse)' : 'var(--color-text-muted)',
+                }}
+              >
+                Preview as Guest
+              </button>
             </div>
 
-            {/* Participant Codes */}
-            <div className="pq-card" style={{ padding: '1.5rem 2rem' }}>
-              <div className="flex items-center justify-between mb-4">
-                <h3 style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, color: 'var(--color-text)', fontSize: '1rem' }}>
-                  Access Codes
-                </h3>
-                <button
-                  onClick={copyAllCodes}
-                  className="pq-btn pq-btn-ghost"
-                  style={{
-                    fontFamily: 'var(--font-body)',
-                    fontSize: '0.8rem',
-                    fontWeight: 600,
-                    color: copiedKey === 'allCodes' ? 'var(--color-success)' : 'var(--color-primary)',
-                  }}
-                >
-                  {copiedKey === 'allCodes' ? '\u2713 Copied!' : 'Copy All'}
-                </button>
-              </div>
-              <div style={{ maxHeight: '280px', overflowY: 'auto' }}>
-                {generatedParticipants.map((p, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center justify-between py-2 px-2"
+            {/* --- Summary Tab --- */}
+            {reviewTab === 'summary' && (
+              <>
+                <div className="pq-card" style={{ padding: '2rem' }}>
+                  <h2
                     style={{
-                      borderBottom: i < generatedParticipants.length - 1 ? '1px solid var(--color-border-light)' : 'none',
-                      borderRadius: 'var(--radius-sm)',
+                      fontFamily: 'var(--font-heading)',
+                      color: 'var(--color-text)',
+                      fontSize: '1.75rem',
+                      fontWeight: 700,
+                      marginBottom: '1.5rem',
                     }}
                   >
-                    <span
-                      className="truncate mr-4"
+                    Review & Launch
+                  </h2>
+
+                  {/* Event Summary */}
+                  <div
+                    style={{
+                      borderRadius: 'var(--radius-lg)',
+                      background: 'var(--color-surface)',
+                      border: '1px solid var(--color-border-light)',
+                      padding: '1.25rem',
+                      marginBottom: '1.5rem',
+                    }}
+                  >
+                    <h3 style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, color: 'var(--color-text)', marginBottom: '0.75rem', fontSize: '1rem' }}>
+                      Event Summary
+                    </h3>
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                      {[
+                        ['Name', eventName],
+                        ['Type', eventType],
+                        ['Start', new Date(startTime).toLocaleString()],
+                        ['End', new Date(endTime).toLocaleString()],
+                        ['Participants', generatedParticipants.length],
+                        ['Missions each', missionCount],
+                        ['Unlock', unlockType === 'all_at_once' ? 'All at once' : 'Timed release'],
+                      ].map(([label, value]) => (
+                        <div key={label} className="py-1" style={{ borderBottom: '1px solid var(--color-border-light)' }}>
+                          <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'block' }}>
+                            {label}
+                          </span>
+                          <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', color: 'var(--color-text)', fontWeight: 500 }}>
+                            {value}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    {anonymityEnabled && (
+                      <div className="mt-3">
+                        <span className="pq-badge pq-badge-warning" style={{ fontFamily: 'var(--font-body)', fontSize: '0.75rem' }}>
+                          Anonymous leaderboard
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Event Code -- prominent card */}
+                <div
+                  className="pq-card animate-scale-in"
+                  style={{
+                    padding: '2rem',
+                    textAlign: 'center',
+                    background: 'var(--color-primary-subtle)',
+                    border: '2px solid var(--color-primary-light)',
+                  }}
+                >
+                  <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-primary)', marginBottom: '0.5rem' }}>
+                    Event Code
+                  </p>
+                  <p
+                    style={{
+                      fontFamily: 'var(--font-heading)',
+                      fontSize: '2.5rem',
+                      fontWeight: 800,
+                      color: 'var(--color-primary)',
+                      letterSpacing: '0.2em',
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    {eventCode}
+                  </p>
+                  <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.8rem', color: 'var(--color-text-secondary)', marginTop: '0.5rem' }}>
+                    Participants and spectators use this to join
+                  </p>
+                </div>
+
+                {/* Participant Codes */}
+                <div className="pq-card" style={{ padding: '1.5rem 2rem' }}>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, color: 'var(--color-text)', fontSize: '1rem' }}>
+                      Access Codes
+                    </h3>
+                    <button
+                      onClick={copyAllCodes}
+                      className="pq-btn pq-btn-ghost"
                       style={{
                         fontFamily: 'var(--font-body)',
-                        fontSize: '0.875rem',
-                        color: p.isNamed ? 'var(--color-text)' : 'var(--color-text-muted)',
-                        fontStyle: p.isNamed ? 'normal' : 'italic',
-                      }}
-                    >
-                      {p.name}
-                    </span>
-                    <span
-                      style={{
-                        fontFamily: 'monospace',
-                        fontSize: '0.875rem',
+                        fontSize: '0.8rem',
                         fontWeight: 600,
-                        color: 'var(--color-text)',
-                        letterSpacing: '0.1em',
-                        flexShrink: 0,
+                        color: copiedKey === 'allCodes' ? 'var(--color-success)' : 'var(--color-primary)',
                       }}
                     >
-                      {p.accessCode}
-                    </span>
+                      {copiedKey === 'allCodes' ? '\u2713 Copied!' : 'Copy All'}
+                    </button>
                   </div>
-                ))}
+                  <div style={{ maxHeight: '280px', overflowY: 'auto' }}>
+                    {generatedParticipants.map((p, i) => (
+                      <div
+                        key={i}
+                        className="flex items-center justify-between py-2 px-2"
+                        style={{
+                          borderBottom: i < generatedParticipants.length - 1 ? '1px solid var(--color-border-light)' : 'none',
+                          borderRadius: 'var(--radius-sm)',
+                        }}
+                      >
+                        <span
+                          className="truncate mr-4"
+                          style={{
+                            fontFamily: 'var(--font-body)',
+                            fontSize: '0.875rem',
+                            color: p.isNamed ? 'var(--color-text)' : 'var(--color-text-muted)',
+                            fontStyle: p.isNamed ? 'normal' : 'italic',
+                          }}
+                        >
+                          {p.name}
+                        </span>
+                        <span
+                          style={{
+                            fontFamily: 'monospace',
+                            fontSize: '0.875rem',
+                            fontWeight: 600,
+                            color: 'var(--color-text)',
+                            letterSpacing: '0.1em',
+                            flexShrink: 0,
+                          }}
+                        >
+                          {p.accessCode}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* --- Preview as Guest Tab --- */}
+            {reviewTab === 'preview' && (
+              <div className="flex flex-col gap-4">
+                {/* Preview banner */}
+                <div
+                  style={{
+                    borderRadius: 'var(--radius-lg)',
+                    background: 'var(--color-primary-subtle)',
+                    border: '1px solid var(--color-primary-light)',
+                    padding: '0.875rem 1.25rem',
+                    textAlign: 'center',
+                  }}
+                >
+                  <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.8rem', color: 'var(--color-primary)', fontWeight: 600 }}>
+                    This is what your guests will see when they open their missions
+                  </p>
+                </div>
+
+                {/* Fake phone frame */}
+                <div
+                  style={{
+                    borderRadius: 'var(--radius-xl)',
+                    border: '3px solid var(--color-border)',
+                    background: 'var(--color-bg)',
+                    overflow: 'hidden',
+                    maxWidth: '380px',
+                    margin: '0 auto',
+                    width: '100%',
+                  }}
+                >
+                  {/* Phone header */}
+                  <div
+                    style={{
+                      background: 'var(--color-surface)',
+                      borderBottom: '1px solid var(--color-border-light)',
+                      padding: '1rem 1.25rem 0.75rem',
+                    }}
+                  >
+                    <h3
+                      style={{
+                        fontFamily: 'var(--font-heading)',
+                        fontSize: '1.25rem',
+                        fontWeight: 800,
+                        color: 'var(--color-primary)',
+                        marginBottom: '0.25rem',
+                      }}
+                    >
+                      {eventName}
+                    </h3>
+                    <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                      {generatedParticipants[0]?.isNamed ? generatedParticipants[0].name : 'Your Guest'}'s Missions
+                    </p>
+
+                    {/* Progress bar */}
+                    <div className="mt-3 mb-1">
+                      <div className="flex items-center justify-between mb-1">
+                        <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.7rem', fontWeight: 600, color: 'var(--color-text-secondary)' }}>
+                          0 of {missionCount} complete
+                        </span>
+                      </div>
+                      <div
+                        style={{
+                          height: '6px',
+                          borderRadius: 'var(--radius-full)',
+                          background: 'var(--color-border-light)',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: '0%',
+                            height: '100%',
+                            borderRadius: 'var(--radius-full)',
+                            background: 'var(--color-primary)',
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Mission cards */}
+                  <div style={{ padding: '0.75rem 1rem 1.25rem' }} className="flex flex-col gap-2.5">
+                    {previewLoading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <div className="pq-spinner" />
+                      </div>
+                    ) : previewMissions.length === 0 ? (
+                      <p className="text-center py-8" style={{ fontFamily: 'var(--font-body)', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+                        No preview missions available.
+                      </p>
+                    ) : (
+                      <>
+                        {previewMissions.map((m, i) => {
+                          const isLocked = unlockType === 'timed' && i > 0
+                          const category = m.categories?.name
+
+                          if (isLocked) {
+                            // Locked mission card
+                            const unlockLabel = unlockTimes[i]
+                              ? new Date(unlockTimes[i]).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+                              : `Later`
+                            return (
+                              <div
+                                key={m.id}
+                                className="pq-card w-full"
+                                style={{
+                                  background: 'var(--color-surface-hover)',
+                                  borderColor: 'var(--color-border)',
+                                  borderStyle: 'dashed',
+                                  borderWidth: '1.5px',
+                                  opacity: 0.7,
+                                  minHeight: 60,
+                                }}
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div
+                                    className="flex-shrink-0 flex items-center justify-center"
+                                    style={{
+                                      width: 28, height: 28,
+                                      borderRadius: 'var(--radius-full)',
+                                      background: 'var(--color-border)',
+                                    }}
+                                  >
+                                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ color: 'var(--color-text-muted)' }}>
+                                      <rect x="3" y="7" width="10" height="8" rx="2" stroke="currentColor" strokeWidth="1.5" />
+                                      <path d="M5 7V5C5 3.34315 6.34315 2 8 2C9.65685 2 11 3.34315 11 5V7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                                      <circle cx="8" cy="11" r="1" fill="currentColor" />
+                                    </svg>
+                                  </div>
+                                  <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--color-text-muted)', fontFamily: 'var(--font-body)' }}>
+                                    Unlocks at {unlockLabel}
+                                  </p>
+                                </div>
+                              </div>
+                            )
+                          }
+
+                          // Unlocked mission card
+                          return (
+                            <div
+                              key={m.id}
+                              className="pq-card w-full"
+                              style={{ minHeight: 44 }}
+                            >
+                              <div className="flex items-center gap-3">
+                                <div
+                                  className="flex-shrink-0 flex items-center justify-center"
+                                  style={{
+                                    width: 28, height: 28,
+                                    borderRadius: 'var(--radius-full)',
+                                    border: '2px solid var(--color-border-strong)',
+                                    background: 'var(--color-surface)',
+                                  }}
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <p style={{ fontSize: 14, lineHeight: 1.5, color: 'var(--color-text)', fontFamily: 'var(--font-body)' }}>
+                                    {m.text}
+                                  </p>
+                                </div>
+                                {category && (
+                                  <span className="pq-badge pq-badge-muted flex-shrink-0" style={{ fontSize: 10 }}>
+                                    {category}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </>
+                    )}
+                  </div>
+
+                  {/* Fake bottom nav */}
+                  <div
+                    className="flex items-center justify-around"
+                    style={{
+                      borderTop: '1px solid var(--color-border-light)',
+                      background: 'var(--color-surface)',
+                      padding: '0.625rem 0 0.875rem',
+                    }}
+                  >
+                    {[
+                      { label: 'Missions', active: true },
+                      { label: 'Leaderboard', active: false },
+                      { label: 'Feed', active: false },
+                    ].map((t) => (
+                      <div
+                        key={t.label}
+                        className="flex flex-col items-center gap-0.5"
+                        style={{ opacity: t.active ? 1 : 0.4 }}
+                      >
+                        <div
+                          style={{
+                            width: 6, height: 6,
+                            borderRadius: 'var(--radius-full)',
+                            background: t.active ? 'var(--color-primary)' : 'transparent',
+                          }}
+                        />
+                        <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.65rem', fontWeight: t.active ? 700 : 400, color: t.active ? 'var(--color-primary)' : 'var(--color-text-muted)' }}>
+                          {t.label}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <p
+                  style={{
+                    fontFamily: 'var(--font-body)',
+                    fontSize: '0.75rem',
+                    color: 'var(--color-text-muted)',
+                    textAlign: 'center',
+                    marginTop: '0.25rem',
+                  }}
+                >
+                  Sample missions shown — each guest gets a unique random set
+                </p>
               </div>
-            </div>
+            )}
           </div>
         )}
 
@@ -1506,6 +1875,87 @@ export default function CreateEvent() {
               </div>
             </div>
 
+            {/* Post-launch: How heard + email opt-in */}
+            <div className="pq-card" style={{ padding: '1.75rem 2rem' }}>
+              <h3 style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, color: 'var(--color-text)', marginBottom: '0.25rem', fontSize: '1rem' }}>
+                One more thing (optional)
+              </h3>
+              <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: '1rem', lineHeight: 1.5 }}>
+                Help us improve Party Quest and stay in the loop.
+              </p>
+
+              <div className="flex flex-col gap-4">
+                <div>
+                  <label
+                    className="block mb-1.5"
+                    style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}
+                  >
+                    How did you hear about Party Quest?
+                  </label>
+                  <select
+                    value={howHeard}
+                    onChange={async (e) => {
+                      setHowHeard(e.target.value)
+                      if (createdEventId) {
+                        await supabase
+                          .from('events')
+                          .update({ how_heard: e.target.value || null })
+                          .eq('id', createdEventId)
+                      }
+                    }}
+                    className="pq-input w-full"
+                  >
+                    <option value="">-- Select --</option>
+                    {HOW_HEARD_OPTIONS.map((o) => (
+                      <option key={o} value={o.toLowerCase()}>
+                        {o}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={emailOptIn}
+                    onChange={async (e) => {
+                      setEmailOptIn(e.target.checked)
+                      if (createdEventId) {
+                        await supabase
+                          .from('events')
+                          .update({
+                            email_opt_in: e.target.checked,
+                            organizer_email: e.target.checked ? organizerEmail : null,
+                          })
+                          .eq('id', createdEventId)
+                      }
+                    }}
+                    style={{ accentColor: 'var(--color-primary)', width: '18px', height: '18px' }}
+                  />
+                  <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>
+                    Send me a post-event summary
+                  </span>
+                </label>
+                {emailOptIn && (
+                  <input
+                    type="email"
+                    value={organizerEmail}
+                    onChange={(e) => setOrganizerEmail(e.target.value)}
+                    onBlur={async () => {
+                      if (createdEventId && emailOptIn) {
+                        await supabase
+                          .from('events')
+                          .update({ organizer_email: organizerEmail })
+                          .eq('id', createdEventId)
+                      }
+                    }}
+                    placeholder="your@email.com"
+                    className="pq-input w-full"
+                  />
+                )}
+              </div>
+            </div>
+
             <button
               onClick={() => navigate(`/organizer/event/${createdEventId}`)}
               className="pq-btn pq-btn-primary w-full"
@@ -1559,7 +2009,7 @@ export default function CreateEvent() {
         {/* Navigation buttons */}
         {!launched && (
           <div className="mt-8">
-            {step < 4 ? (
+            {step < 3 ? (
               <button
                 onClick={nextStep}
                 className="pq-btn pq-btn-primary w-full"
