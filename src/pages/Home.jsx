@@ -170,6 +170,18 @@ export default function Home() {
             </span>
             .
           </p>
+          <p
+            className="animate-slide-up stagger-2"
+            style={{
+              fontSize: '0.875rem',
+              color: 'var(--color-text-muted)',
+              lineHeight: 1.6,
+              maxWidth: '280px',
+              margin: '10px auto 0',
+            }}
+          >
+            Your host gives everyone secret social missions to complete during the event — things to say, do, or pull off. Finish them, earn points, and see where you land on the live leaderboard.
+          </p>
         </div>
 
         {/* Primary CTA */}

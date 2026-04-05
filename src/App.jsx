@@ -54,7 +54,7 @@ export default function App() {
             letterSpacing: '0.03em',
           }}
         >
-          v2.3
+          v2.5
         </span>
       </div>
     </ThemeProvider>

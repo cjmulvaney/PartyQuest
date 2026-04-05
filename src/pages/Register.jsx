@@ -47,6 +47,12 @@ export default function Register() {
         return
       }
 
+      if (data.status !== 'active') {
+        setError("This event isn't open yet. Come back when your host has started the event.")
+        setLoading(false)
+        return
+      }
+
       setEvent(data)
       setLoading(false)
     }

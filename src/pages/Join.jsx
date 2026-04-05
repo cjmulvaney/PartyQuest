@@ -36,6 +36,12 @@ export default function Join() {
       return
     }
 
+    if (event.status !== 'active') {
+      setError("This event hasn't started yet. Your host needs to start it before you can join.")
+      setLoading(false)
+      return
+    }
+
     // Look up the participant by access code within this event
     const { data: participant, error: partErr } = await supabase
       .from('participants')
@@ -108,7 +114,7 @@ export default function Join() {
         </button>
 
         {/* Header */}
-        <div className="mb-8 animate-slide-up stagger-1">
+        <div className="mb-6 animate-slide-up stagger-1">
           <h1
             style={{
               fontFamily: 'var(--font-heading)',
@@ -130,6 +136,21 @@ export default function Join() {
             }}
           >
             Enter the codes from your host to get started.
+          </p>
+        </div>
+
+        {/* What to expect */}
+        <div
+          className="animate-fade-in"
+          style={{
+            padding: '12px 14px',
+            background: 'var(--color-primary-subtle)',
+            borderRadius: 'var(--radius-md)',
+            marginBottom: '20px',
+          }}
+        >
+          <p style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', margin: 0, lineHeight: 1.5 }}>
+            <strong style={{ color: 'var(--color-text)' }}>What is Party Quest?</strong> A secret mission game for your event. Once you join, you'll get a personal set of social missions to complete — things to say, do, or pull off during the gathering. Earn points for each one and see where you land on the live leaderboard.
           </p>
         </div>
 
