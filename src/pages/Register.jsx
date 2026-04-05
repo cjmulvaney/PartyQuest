@@ -70,6 +70,21 @@ export default function Register() {
     setError('')
 
     try {
+      // Check for duplicate name
+      const { data: existingName } = await supabase
+        .from('participants')
+        .select('id')
+        .eq('event_id', event.id)
+        .ilike('name', name.trim())
+        .eq('is_active', true)
+        .limit(1)
+
+      if (existingName && existingName.length > 0) {
+        setError(`Sorry, "${name.trim()}" is already taken. Consider adding a last initial to stand out — e.g. "${name.trim()} S."`)
+        setSubmitting(false)
+        return
+      }
+
       // Check max participants
       if (event.max_participants) {
         const { count } = await supabase

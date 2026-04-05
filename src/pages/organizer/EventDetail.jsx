@@ -572,6 +572,9 @@ export default function EventDetail() {
 
     const base = ensureLocalAssignments()
 
+    // Never allow replacing a completed mission slot during a live event
+    if (isLive && base[targetPIdx]?.missions[targetMIdx]?.completed) return
+
     if (source.type === 'pool') {
       // Dropping from pool onto a specific slot — replace that slot
       const next = base.map((p, pIdx) => {

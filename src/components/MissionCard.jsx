@@ -11,6 +11,8 @@ export default function MissionCard({ mission, onSave }) {
   const [saving, setSaving] = useState(false)
   const [collapsing, setCollapsing] = useState(false)
   const fileInputRef = useRef(null)
+  const cameraInputRef = useRef(null)
+  const [showPhotoOptions, setShowPhotoOptions] = useState(false)
 
   const missionText = mission.missions?.text
   const category = mission.missions?.category
@@ -62,6 +64,7 @@ export default function MissionCard({ mission, onSave }) {
   function handleRemovePhoto() {
     setPhotoUrl('')
     if (fileInputRef.current) fileInputRef.current.value = ''
+    if (cameraInputRef.current) cameraInputRef.current.value = ''
   }
 
   async function handleSave() {
@@ -383,25 +386,30 @@ export default function MissionCard({ mission, onSave }) {
             </button>
           </div>
         ) : (
-          <div>
+          <div style={{ position: 'relative' }}>
+            {/* Hidden input: library */}
             <input
               ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handlePhotoUpload}
+              style={{ display: 'none' }}
+            />
+            {/* Hidden input: camera */}
+            <input
+              ref={cameraInputRef}
               type="file"
               accept="image/*"
               capture="environment"
               onChange={handlePhotoUpload}
               style={{ display: 'none' }}
-              id={`photo-${mission.id}`}
             />
+
             <button
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => setShowPhotoOptions(true)}
               className="pq-btn pq-btn-secondary"
               disabled={uploading}
-              style={{
-                fontSize: 14,
-                padding: '8px 16px',
-                gap: 6,
-              }}
+              style={{ fontSize: 14, padding: '8px 16px', gap: 6 }}
             >
               {uploading ? (
                 <>
@@ -411,28 +419,80 @@ export default function MissionCard({ mission, onSave }) {
               ) : (
                 <>
                   <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                    <rect
-                      x="2"
-                      y="3"
-                      width="14"
-                      height="12"
-                      rx="2"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                    />
+                    <rect x="2" y="3" width="14" height="12" rx="2" stroke="currentColor" strokeWidth="1.5" />
                     <circle cx="6.5" cy="7.5" r="1.5" stroke="currentColor" strokeWidth="1.2" />
-                    <path
-                      d="M2 12L5.5 9L8 11L11.5 7L16 12"
-                      stroke="currentColor"
-                      strokeWidth="1.2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
+                    <path d="M2 12L5.5 9L8 11L11.5 7L16 12" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                   Add Photo
                 </>
               )}
             </button>
+
+            {/* Photo source picker */}
+            {showPhotoOptions && (
+              <>
+                {/* Backdrop */}
+                <div
+                  onClick={() => setShowPhotoOptions(false)}
+                  style={{
+                    position: 'fixed',
+                    inset: 0,
+                    zIndex: 40,
+                    background: 'rgba(0,0,0,0.35)',
+                  }}
+                />
+                <div
+                  style={{
+                    position: 'fixed',
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    zIndex: 50,
+                    background: 'var(--color-surface)',
+                    borderTop: '1px solid var(--color-border)',
+                    borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0',
+                    padding: '20px 16px 32px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 10,
+                  }}
+                >
+                  <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-muted)', fontFamily: 'var(--font-body)', textAlign: 'center', marginBottom: 4 }}>
+                    Add Photo
+                  </p>
+                  <button
+                    onClick={() => { setShowPhotoOptions(false); cameraInputRef.current?.click() }}
+                    className="pq-btn pq-btn-secondary w-full"
+                    style={{ fontSize: 15, padding: '12px 16px', gap: 8, justifyContent: 'center' }}
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
+                      <circle cx="12" cy="13" r="4" />
+                    </svg>
+                    Take a Photo
+                  </button>
+                  <button
+                    onClick={() => { setShowPhotoOptions(false); fileInputRef.current?.click() }}
+                    className="pq-btn pq-btn-secondary w-full"
+                    style={{ fontSize: 15, padding: '12px 16px', gap: 8, justifyContent: 'center' }}
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="3" width="18" height="18" rx="2" />
+                      <circle cx="8.5" cy="8.5" r="1.5" />
+                      <path d="M21 15l-5-5L5 21" />
+                    </svg>
+                    Choose from Library
+                  </button>
+                  <button
+                    onClick={() => setShowPhotoOptions(false)}
+                    className="pq-btn pq-btn-ghost w-full"
+                    style={{ fontSize: 15, padding: '12px 16px', marginTop: 4 }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>

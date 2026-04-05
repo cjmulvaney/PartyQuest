@@ -39,8 +39,24 @@ export default function Play() {
   )
   const [error, setError] = useState('')
   const [toast, setToast] = useState('')
+  const [reconnecting, setReconnecting] = useState(false)
   const unlockTimersRef = useRef([])
   const prevUnlockedRef = useRef(new Set())
+
+  const CACHE_KEY = `pq_session_${accessCode}`
+
+  function readCache() {
+    try {
+      const raw = localStorage.getItem(CACHE_KEY)
+      return raw ? JSON.parse(raw) : null
+    } catch { return null }
+  }
+
+  function writeCache(part, evt, pm) {
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ participant: part, event: evt, missions: pm }))
+    } catch {}
+  }
 
   const loadData = useCallback(async () => {
     const { data: part, error: partErr } = await supabase
@@ -50,12 +66,22 @@ export default function Play() {
       .single()
 
     if (partErr || !part) {
-      setError('Invalid access code.')
-      setLoading(false)
+      // Network failed or code not found — fall back to cache if available
+      const cached = readCache()
+      if (cached) {
+        setParticipant(cached.participant)
+        setEvent(cached.event)
+        setMissions(cached.missions || [])
+        setReconnecting(true)
+        setLoading(false)
+        // Retry in 10 seconds
+        setTimeout(() => loadData(), 10000)
+      } else {
+        setError('Invalid access code.')
+        setLoading(false)
+      }
       return
     }
-
-    setParticipant(part)
 
     const { data: evt } = await supabase
       .from('events')
@@ -63,19 +89,31 @@ export default function Play() {
       .eq('id', part.event_id)
       .single()
 
-    setEvent(evt)
-
     const { data: pm } = await supabase
       .from('participant_missions')
       .select('id, completed, notes, photo_url, completed_at, unlock_time, mission_id, missions(text, category_id, categories(name))')
       .eq('participant_id', part.id)
       .order('unlock_time', { ascending: true, nullsFirst: true })
 
+    writeCache(part, evt, pm || [])
+    setParticipant(part)
+    setEvent(evt)
     setMissions(pm || [])
+    setReconnecting(false)
     setLoading(false)
   }, [accessCode])
 
-  useEffect(() => { loadData() }, [loadData])
+  // On mount: load cache immediately so there's no blank screen on return visits
+  useEffect(() => {
+    const cached = readCache()
+    if (cached) {
+      setParticipant(cached.participant)
+      setEvent(cached.event)
+      setMissions(cached.missions || [])
+      setLoading(false)
+    }
+    loadData()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const onFocus = () => loadData()
@@ -179,6 +217,19 @@ export default function Play() {
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: 'var(--color-bg)', paddingBottom: '5rem' }}>
+      {reconnecting && (
+        <div style={{
+          background: 'var(--color-warning-light, #fffbeb)',
+          borderBottom: '1px solid var(--color-warning, #f59e0b)',
+          padding: '8px 16px',
+          textAlign: 'center',
+          fontSize: 13,
+          color: 'var(--color-warning-dark, #92400e)',
+          fontFamily: 'var(--font-body)',
+        }}>
+          Reconnecting… your progress is saved
+        </div>
+      )}
       <div style={{ maxWidth: '28rem', margin: '0 auto', padding: '0 1rem' }}>
         {/* Header */}
         <div
