@@ -145,6 +145,7 @@ export default function CreateEvent() {
       } else {
         setMaxParticipants(null)
       }
+      if (data.event_code) setEventCode(data.event_code)
     }
     loadEvent()
   }, [editId, user])
@@ -316,9 +317,11 @@ export default function CreateEvent() {
   }
 
   function prepareReview() {
-    // Generate event code
-    const code = generateCode(6)
-    setEventCode(code)
+    // Generate event code only for new events; preserve existing code when editing
+    if (!isEditMode) {
+      const code = generateCode(6)
+      setEventCode(code)
+    }
 
     // Parse names — only create participants for names actually entered
     const names = participantNames
