@@ -2,6 +2,11 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase.js'
 import { useAuth } from '../../hooks/useAuth.js'
+import { generateCode, selectMissionsLeveledRoundRobin, insertParticipantWithRetry } from '../../lib/missions.js'
+
+const EVENT_TYPE_DB_MAP = {
+  'bachelorette/bachelor': 'bachelorette',
+}
 
 const EVENT_TYPES = [
   'Birthday',
@@ -85,7 +90,7 @@ export default function CreateEvent() {
       end.setHours(23, 0, 0, 0)
       setEndTime(formatDateTimeLocal(end))
     }
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps — intentional mount-only effect
 
   // Pre-fill organizer email from Google account
   useEffect(() => {
@@ -375,7 +380,7 @@ export default function CreateEvent() {
       const eventPayload = {
         organizer_id: user.id,
         name: eventName.trim(),
-        event_type: eventType.toLowerCase(),
+        event_type: EVENT_TYPE_DB_MAP[eventType.toLowerCase()] || eventType.toLowerCase(),
         start_time: new Date(startTime).toISOString(),
         end_time: new Date(endTime).toISOString(),
         event_code: eventCode,
@@ -410,7 +415,7 @@ export default function CreateEvent() {
             ? unlockTimes.filter((t) => t.trim()).map((t) => new Date(t).toISOString())
             : null
 
-        await supabase
+        const { error: configError } = await supabase
           .from('event_config')
           .update({
             mission_count: missionCount,
@@ -419,6 +424,8 @@ export default function CreateEvent() {
             tag_filters: selectedTags,
           })
           .eq('event_id', editEventId)
+
+        if (configError) throw configError
 
         setCreatedEventId(eventData.id)
         setLaunched(true)
@@ -450,35 +457,16 @@ export default function CreateEvent() {
 
         if (configError) throw configError
 
-        // Insert named participants (if any)
+        // Insert named participants (if any) with access code retry
         let allParticipants = []
 
         if (generatedParticipants.length > 0) {
-          const participantRows = generatedParticipants.map((p) => ({
-            event_id: eventData.id,
-            name: p.name,
-            access_code: p.accessCode,
-          }))
-
-          const { data: insertedParticipants, error: partError } = await supabase
-            .from('participants')
-            .insert(participantRows)
-            .select()
-
-          if (partError) throw partError
-          allParticipants = insertedParticipants
-        }
-
-        // Also pick up any self-registered participants who joined before launch
-        const { data: earlyRegistrants } = await supabase
-          .from('participants')
-          .select('*')
-          .eq('event_id', eventData.id)
-          .eq('is_active', true)
-          .eq('source', 'self')
-
-        if (earlyRegistrants && earlyRegistrants.length > 0) {
-          allParticipants = [...allParticipants, ...earlyRegistrants]
+          const inserted = await Promise.all(
+            generatedParticipants.map((p) =>
+              insertParticipantWithRetry(supabase, eventData.id, p.name, 'manual')
+            )
+          )
+          allParticipants = inserted
         }
 
         // Assign missions to all participants (named + early self-registered)
@@ -563,39 +551,39 @@ export default function CreateEvent() {
 
       // Leveled round-robin: sort by least-assigned, shuffle within same count
       const eligible = missions.filter((m) => !alreadyAssigned.has(m.id))
-      const sorted = [...eligible].sort((a, b) => {
-        const diff = (assignmentCounts[a.id] || 0) - (assignmentCounts[b.id] || 0)
-        if (diff !== 0) return diff
-        return Math.random() - 0.5 // shuffle within same level
-      })
-
-      const selected = sorted.slice(0, needed)
+      const selected = selectMissionsLeveledRoundRobin(eligible, needed, assignmentCounts)
 
       selected.forEach((m, i) => {
         assignmentCounts[m.id] = (assignmentCounts[m.id] || 0) + 1
+        const scheduleIdx = alreadyAssigned.size + i
         allRows.push({
           participant_id: participant.id,
           mission_id: m.id,
           unlock_time:
-            unlockType === 'timed' && schedule && schedule[i]
-              ? schedule[i]
+            unlockType === 'timed' && schedule && schedule[scheduleIdx]
+              ? schedule[scheduleIdx]
               : null,
         })
       })
     }
 
     if (allRows.length > 0) {
-      await supabase.from('participant_missions').insert(allRows)
+      const { error: missionErr } = await supabase.from('participant_missions').insert(allRows)
+      if (missionErr) throw missionErr
     }
   }
 
-  function copyWithToast(text, label, key) {
-    navigator.clipboard?.writeText(text)
-    setCopyToast(label || 'Copied!')
-    setTimeout(() => setCopyToast(''), 2000)
-    if (key) {
-      setCopiedKey(key)
-      setTimeout(() => setCopiedKey(''), 2000)
+  async function copyWithToast(text, label, key) {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopyToast(label || 'Copied!')
+      setTimeout(() => setCopyToast(''), 2000)
+      if (key) {
+        setCopiedKey(key)
+        setTimeout(() => setCopiedKey(''), 2000)
+      }
+    } catch {
+      // Clipboard API failed (non-HTTPS or denied) — don't show false success
     }
   }
 
@@ -2111,15 +2099,6 @@ export default function CreateEvent() {
       )}
     </div>
   )
-}
-
-function generateCode(length) {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-  let code = ''
-  for (let i = 0; i < length; i++) {
-    code += chars[Math.floor(Math.random() * chars.length)]
-  }
-  return code
 }
 
 function formatDateTimeLocal(date) {

@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase.js'
 import { useAuth } from '../../hooks/useAuth.js'
 import { getAvatarColor, getInitials } from '../../lib/avatar.js'
+import { insertParticipantWithRetry, selectMissionsLeveledRoundRobin } from '../../lib/missions.js'
 import Leaderboard from '../../components/Leaderboard.jsx'
 import ActivityFeed from '../../components/ActivityFeed.jsx'
 
@@ -51,13 +52,17 @@ export default function EventDetail() {
   const [copyToast, setCopyToast] = useState('')
   const [copiedKey, setCopiedKey] = useState('')
 
-  function copyWithToast(text, label, key) {
-    navigator.clipboard?.writeText(text)
-    setCopyToast(label || 'Copied!')
-    setTimeout(() => setCopyToast(''), 2000)
-    if (key) {
-      setCopiedKey(key)
-      setTimeout(() => setCopiedKey(''), 2000)
+  async function copyWithToast(text, label, key) {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopyToast(label || 'Copied!')
+      setTimeout(() => setCopyToast(''), 2000)
+      if (key) {
+        setCopiedKey(key)
+        setTimeout(() => setCopiedKey(''), 2000)
+      }
+    } catch {
+      // Clipboard API failed (non-HTTPS or denied) — don't show false success
     }
   }
 
@@ -370,23 +375,16 @@ export default function EventDetail() {
     setError('')
 
     try {
-      const accessCode = generateCode(6)
-      const { data: newPart, error: partErr } = await supabase
-        .from('participants')
-        .insert({
-          event_id: id,
-          name: newParticipantName.trim(),
-          access_code: accessCode,
-          source: 'manual',
-        })
-        .select()
-        .single()
-
-      if (partErr) throw partErr
+      const newPart = await insertParticipantWithRetry(supabase, id, newParticipantName.trim(), 'manual')
 
       // If event is active, assign missions immediately
       if (event.status === 'active' && config) {
-        await assignMissionsToParticipant(newPart, config)
+        try {
+          await assignMissionsToParticipant(newPart, config)
+        } catch (missionErr) {
+          console.error('Mission assignment failed:', missionErr)
+          setError('Participant added, but mission assignment failed. Assign missions manually from the missions tab.')
+        }
       }
 
       setNewParticipantName('')
@@ -824,8 +822,33 @@ export default function EventDetail() {
     const { data: missions } = await query
     if (!missions || missions.length === 0) return
 
-    const shuffled = [...missions].sort(() => Math.random() - 0.5)
-    const selected = shuffled.slice(0, eventConfig.mission_count)
+    // Get existing assignment counts for leveled round-robin
+    const { data: allEventParticipants } = await supabase
+      .from('participants')
+      .select('id')
+      .eq('event_id', id)
+      .eq('is_active', true)
+
+    const eventParticipantIds = (allEventParticipants || []).map((p) => p.id)
+    const assignmentCounts = {}
+    missions.forEach((m) => (assignmentCounts[m.id] = 0))
+
+    if (eventParticipantIds.length > 0) {
+      const { data: existingAssignments } = await supabase
+        .from('participant_missions')
+        .select('mission_id')
+        .in('participant_id', eventParticipantIds)
+
+      if (existingAssignments) {
+        existingAssignments.forEach((a) => {
+          if (assignmentCounts[a.mission_id] !== undefined) {
+            assignmentCounts[a.mission_id]++
+          }
+        })
+      }
+    }
+
+    const selected = selectMissionsLeveledRoundRobin(missions, eventConfig.mission_count, assignmentCounts)
 
     const rows = selected.map((m) => ({
       participant_id: participant.id,
@@ -833,7 +856,8 @@ export default function EventDetail() {
     }))
 
     if (rows.length > 0) {
-      await supabase.from('participant_missions').insert(rows)
+      const { error: insertErr } = await supabase.from('participant_missions').insert(rows)
+      if (insertErr) throw insertErr
     }
   }
 
@@ -1794,11 +1818,3 @@ export default function EventDetail() {
   )
 }
 
-function generateCode(length) {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-  let code = ''
-  for (let i = 0; i < length; i++) {
-    code += chars[Math.floor(Math.random() * chars.length)]
-  }
-  return code
-}

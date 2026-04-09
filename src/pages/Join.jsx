@@ -14,58 +14,35 @@ export default function Join() {
     setError('')
     setLoading(true)
 
-    const evCode = eventCode.toUpperCase().trim()
-    const acCode = accessCode.toUpperCase().trim()
+    try {
+      const { data: result, error: rpcErr } = await supabase.rpc('rpc_join_event', {
+        p_event_code: eventCode.trim(),
+        p_access_code: accessCode.trim(),
+      })
 
-    // Look up the event
-    const { data: event, error: eventErr } = await supabase
-      .from('events')
-      .select('id, name, status')
-      .eq('event_code', evCode)
-      .single()
+      if (rpcErr) {
+        const msg = rpcErr.message || ''
+        if (msg.includes('Event not found')) {
+          setError('Event not found. Check your event code.')
+        } else if (msg.includes('already ended')) {
+          setError('This event has already ended.')
+        } else if (msg.includes('not open yet')) {
+          setError("This event hasn't started yet. Your host needs to start it before you can join.")
+        } else if (msg.includes('Access code not found')) {
+          setError('Access code not found for this event. Check both codes and try again.')
+        } else {
+          setError(msg || 'Failed to join. Please try again.')
+        }
+        setLoading(false)
+        return
+      }
 
-    if (eventErr || !event) {
-      setError('Event not found. Check your event code.')
       setLoading(false)
-      return
-    }
-
-    if (event.status === 'ended') {
-      setError('This event has already ended.')
+      navigate(`/play/${result.access_code}`)
+    } catch (err) {
+      setError(err.message || 'Failed to join. Please try again.')
       setLoading(false)
-      return
     }
-
-    if (event.status !== 'active') {
-      setError("This event hasn't started yet. Your host needs to start it before you can join.")
-      setLoading(false)
-      return
-    }
-
-    // Look up the participant by access code within this event
-    const { data: participant, error: partErr } = await supabase
-      .from('participants')
-      .select('id, access_code, joined_at')
-      .eq('event_id', event.id)
-      .eq('access_code', acCode)
-      .single()
-
-    if (partErr || !participant) {
-      setError('Access code not found for this event. Check both codes and try again.')
-      setLoading(false)
-      return
-    }
-
-    // Mark as joined if first time
-    if (!participant.joined_at) {
-      await supabase
-        .from('participants')
-        .update({ joined_at: new Date().toISOString() })
-        .eq('id', participant.id)
-    }
-
-    setLoading(false)
-    navigate(`/play/${participant.access_code}`)
   }
 
   const isDisabled = loading || eventCode.trim().length < 3 || accessCode.trim().length < 3

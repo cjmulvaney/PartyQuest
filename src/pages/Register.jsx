@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
+import { selectMissionsLeveledRoundRobin } from '../lib/missions.js'
 
 export default function Register() {
   const { eventCode } = useParams()
@@ -13,13 +14,17 @@ export default function Register() {
   const [copyToast, setCopyToast] = useState('')
   const [copiedKey, setCopiedKey] = useState('')
 
-  function copyWithToast(text, label, key) {
-    navigator.clipboard?.writeText(text)
-    setCopyToast(label || 'Copied!')
-    setTimeout(() => setCopyToast(''), 2000)
-    if (key) {
-      setCopiedKey(key)
-      setTimeout(() => setCopiedKey(''), 2000)
+  async function copyWithToast(text, label, key) {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopyToast(label || 'Copied!')
+      setTimeout(() => setCopyToast(''), 2000)
+      if (key) {
+        setCopiedKey(key)
+        setTimeout(() => setCopiedKey(''), 2000)
+      }
+    } catch {
+      // Clipboard API failed (non-HTTPS or denied) — don't show false success
     }
   }
 
@@ -70,51 +75,30 @@ export default function Register() {
     setError('')
 
     try {
-      // Check for duplicate name
-      const { data: existingName } = await supabase
-        .from('participants')
-        .select('id')
-        .eq('event_id', event.id)
-        .ilike('name', name.trim())
-        .eq('is_active', true)
-        .limit(1)
+      // Atomic registration via RPC — handles duplicate names, max participants, and access code collisions
+      const { data: rpcResult, error: rpcErr } = await supabase.rpc('rpc_register_participant', {
+        p_event_code: eventCode.toUpperCase().trim(),
+        p_name: name.trim(),
+      })
 
-      if (existingName && existingName.length > 0) {
-        setError(`Sorry, "${name.trim()}" is already taken. Consider adding a last initial to stand out — e.g. "${name.trim()} S."`)
+      if (rpcErr) {
+        // Map RPC error messages to user-friendly strings
+        const msg = rpcErr.message || ''
+        if (msg.includes('Name already taken')) {
+          setError(`Sorry, "${name.trim()}" is already taken. Consider adding a last initial to stand out — e.g. "${name.trim()} S."`)
+        } else if (msg.includes('Event is full')) {
+          setError('This event is full. No more spots available.')
+        } else if (msg.includes('not open yet')) {
+          setError("This event isn't open yet. Come back when your host has started the event.")
+        } else {
+          setError(msg || 'Failed to register. Please try again.')
+        }
         setSubmitting(false)
         return
       }
 
-      // Check max participants
-      if (event.max_participants) {
-        const { count } = await supabase
-          .from('participants')
-          .select('id', { count: 'exact', head: true })
-          .eq('event_id', event.id)
-          .eq('is_active', true)
-
-        if (count >= event.max_participants) {
-          setError('This event is full. No more spots available.')
-          setSubmitting(false)
-          return
-        }
-      }
-
-      const accessCode = generateCode(6)
-
-      const { data: participant, error: partErr } = await supabase
-        .from('participants')
-        .insert({
-          event_id: event.id,
-          name: name.trim(),
-          access_code: accessCode,
-          joined_at: new Date().toISOString(),
-          source: 'self',
-        })
-        .select()
-        .single()
-
-      if (partErr) throw partErr
+      const participant = rpcResult
+      const accessCode = participant.access_code
 
       // If event is active, assign missions immediately
       if (event.status === 'active') {
@@ -125,7 +109,13 @@ export default function Register() {
           .single()
 
         if (config) {
-          await assignMissions(participant, config)
+          try {
+            await assignMissions(participant, config)
+          } catch (missionErr) {
+            console.error('Mission assignment failed:', missionErr)
+            // Participant is registered but missions failed — still show success
+            // The organizer can assign missions manually from the dashboard
+          }
         }
       }
 
@@ -189,16 +179,8 @@ export default function Register() {
       }
     }
 
-    // Leveled round-robin: sort by least-assigned, shuffle within same count
-    // This ensures missions are always assigned even when the pool has been
-    // fully distributed — it just picks the least-assigned missions again
-    const sorted = [...missions].sort((a, b) => {
-      const diff = (assignmentCounts[a.id] || 0) - (assignmentCounts[b.id] || 0)
-      if (diff !== 0) return diff
-      return Math.random() - 0.5
-    })
-
-    const selected = sorted.slice(0, config.mission_count)
+    // Leveled round-robin: least-assigned missions first, shuffled within same count
+    const selected = selectMissionsLeveledRoundRobin(missions, config.mission_count, assignmentCounts)
 
     const rows = selected.map((m) => ({
       participant_id: participant.id,
@@ -206,7 +188,8 @@ export default function Register() {
     }))
 
     if (rows.length > 0) {
-      await supabase.from('participant_missions').insert(rows)
+      const { error: insertErr } = await supabase.from('participant_missions').insert(rows)
+      if (insertErr) throw insertErr
     }
   }
 
@@ -481,13 +464,4 @@ export default function Register() {
       </div>
     </div>
   )
-}
-
-function generateCode(length) {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-  let code = ''
-  for (let i = 0; i < length; i++) {
-    code += chars[Math.floor(Math.random() * chars.length)]
-  }
-  return code
 }
