@@ -56,7 +56,7 @@ export default function Register() {
         return
       }
 
-      if (data.status !== 'active') {
+      if (data.status !== 'active' && data.status !== 'upcoming') {
         setError("This event isn't open yet. Come back when your host has started the event.")
         setLoading(false)
         return
@@ -221,7 +221,10 @@ export default function Register() {
     }))
 
     if (rows.length > 0) {
-      const { error: insertErr } = await supabase.from('participant_missions').insert(rows)
+      const { error: insertErr } = await supabase.rpc('rpc_assign_participant_missions', {
+        p_participant_id: participant.id,
+        p_mission_ids: selected.map((m) => m.id),
+      })
       if (insertErr) throw insertErr
     }
   }
@@ -521,9 +524,9 @@ export default function Register() {
             <button
               type="submit"
               disabled={submitting || !name.trim()}
-              style={{ display: showPhoneWarning ? 'none' : undefined }}
               className="pq-btn pq-btn-primary w-full"
               style={{
+                display: showPhoneWarning ? 'none' : undefined,
                 padding: '14px 0',
                 fontSize: '1.1rem',
                 fontFamily: 'var(--font-heading)',

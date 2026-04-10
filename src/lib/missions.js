@@ -43,19 +43,22 @@ export function selectMissionsLeveledRoundRobin(missions, count, assignmentCount
  * @param {string} name - Participant name
  * @param {string} source - 'manual' or 'self'
  * @param {number} maxRetries - Max retry attempts
+ * @param {string|null} phone - E.164 phone number (optional)
  * @returns {Object} The inserted participant record
  */
-export async function insertParticipantWithRetry(supabase, eventId, name, source = 'manual', maxRetries = 3) {
+export async function insertParticipantWithRetry(supabase, eventId, name, source = 'manual', maxRetries = 3, phone = null) {
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     const accessCode = generateCode(6)
+    const payload = {
+      event_id: eventId,
+      name: name.trim(),
+      access_code: accessCode,
+      source,
+    }
+    if (phone) payload.phone = phone
     const { data, error } = await supabase
       .from('participants')
-      .insert({
-        event_id: eventId,
-        name: name.trim(),
-        access_code: accessCode,
-        source,
-      })
+      .insert(payload)
       .select()
       .single()
 
