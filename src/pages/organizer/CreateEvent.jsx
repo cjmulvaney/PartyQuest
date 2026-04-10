@@ -757,7 +757,7 @@ export default function CreateEvent() {
                   type="text"
                   value={eventName}
                   onChange={(e) => setEventName(e.target.value)}
-                  placeholder="e.g. Sarah's Birthday Bash"
+                  placeholder="e.g. Interdimensional Dance Party"
                   className="pq-input w-full"
                   autoFocus
                 />
@@ -930,13 +930,13 @@ export default function CreateEvent() {
                       ref={textareaRef}
                       value={participantNames}
                       onChange={(e) => setParticipantNames(e.target.value)}
-                      placeholder={"Jake, +15551234567\nSarah\nMike, (555) 867-5309\nTaylor"}
+                      placeholder={"David, +15551234567\nTina\nChris, (555) 867-5309\nJerry"}
                       rows={4}
                       style={{ minHeight: '120px', maxHeight: '400px', overflow: 'auto', resize: 'none' }}
                       className="pq-input w-full"
                     />
                     <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.375rem' }}>
-                      One per line. Add a comma and phone number to SMS participants when the event starts.
+                      One per line. Add a comma and phone number to SMS participants when the event starts.<br />Example: David, +15551234567
                     </p>
                   </div>
                 </div>
