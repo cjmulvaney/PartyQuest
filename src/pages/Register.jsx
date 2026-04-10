@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { selectMissionsLeveledRoundRobin } from '../lib/missions.js'
+import { normalizePhone } from '../lib/phone.js'
 
 export default function Register() {
   const { eventCode } = useParams()
@@ -30,6 +31,9 @@ export default function Register() {
 
   // Form fields
   const [name, setName] = useState('')
+  const [phone, setPhone] = useState('')
+  const [smsSent, setSmsSent] = useState(false)
+  const [showPhoneWarning, setShowPhoneWarning] = useState(false)
 
   useEffect(() => {
     async function loadEvent() {
@@ -64,21 +68,35 @@ export default function Register() {
     loadEvent()
   }, [eventCode])
 
-  async function handleRegister(e) {
+  function handleFormSubmit(e) {
     e.preventDefault()
     if (!name.trim()) {
       setError('Name is required.')
       return
     }
 
+    // If no phone number, show warning first
+    const normalizedPhone = normalizePhone(phone)
+    if (!normalizedPhone && !showPhoneWarning) {
+      setShowPhoneWarning(true)
+      return
+    }
+
+    setShowPhoneWarning(false)
+    doRegister()
+  }
+
+  async function doRegister() {
     setSubmitting(true)
     setError('')
 
     try {
       // Atomic registration via RPC — handles duplicate names, max participants, and access code collisions
+      const normalizedPhone = normalizePhone(phone)
       const { data: rpcResult, error: rpcErr } = await supabase.rpc('rpc_register_participant', {
         p_event_code: eventCode.toUpperCase().trim(),
         p_name: name.trim(),
+        p_phone: normalizedPhone || null,
       })
 
       if (rpcErr) {
@@ -117,6 +135,21 @@ export default function Register() {
             // The organizer can assign missions manually from the dashboard
           }
         }
+      }
+
+      // Fire-and-forget SMS if phone was provided
+      if (normalizedPhone) {
+        supabase.functions.invoke('send-participant-sms', {
+          body: {
+            participantId: participant.id,
+            phone: normalizedPhone,
+            name: name.trim(),
+            accessCode,
+            eventName: event.name,
+            eventCode: eventCode.toUpperCase().trim(),
+            scenario: 'self_register',
+          },
+        }).then(() => setSmsSent(true)).catch(() => {})
       }
 
       setSuccess({ accessCode, participantId: participant.id })
@@ -302,7 +335,7 @@ export default function Register() {
               {success.accessCode}
             </p>
             <p className="mt-3 text-sm" style={{ color: 'var(--color-text-muted)' }}>
-              Save this code -- you will need it to rejoin
+              {smsSent ? 'Access code sent to your phone!' : 'Save this code -- you will need it to rejoin'}
             </p>
           </div>
 
@@ -402,7 +435,7 @@ export default function Register() {
 
         {/* Registration form card */}
         <div className="pq-card p-6">
-          <form onSubmit={handleRegister} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <form onSubmit={handleFormSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div>
               <label
                 className="block text-sm font-semibold mb-2"
@@ -420,6 +453,26 @@ export default function Register() {
               />
             </div>
 
+            <div>
+              <label
+                className="block text-sm font-semibold mb-2"
+                style={{ color: 'var(--color-text)', fontFamily: 'var(--font-body)' }}
+              >
+                Phone{' '}
+                <span style={{ fontWeight: 400, color: 'var(--color-text-muted)' }}>(optional)</span>
+              </label>
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => { setPhone(e.target.value); setShowPhoneWarning(false) }}
+                placeholder="(555) 123-4567"
+                className="pq-input w-full"
+              />
+              <p className="mt-1" style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontFamily: 'var(--font-body)' }}>
+                Get your access code by text
+              </p>
+            </div>
+
             {error && (
               <p
                 className="text-sm font-medium"
@@ -432,9 +485,43 @@ export default function Register() {
               </p>
             )}
 
+            {showPhoneWarning && (
+              <div
+                style={{
+                  background: 'var(--color-warning-light, rgba(255, 193, 7, 0.12))',
+                  border: '1px solid var(--color-warning, #f59e0b)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '0.875rem 1rem',
+                }}
+              >
+                <p
+                  className="text-sm font-semibold mb-1"
+                  style={{ color: 'var(--color-warning, #f59e0b)', fontFamily: 'var(--font-heading)' }}
+                >
+                  No phone number entered
+                </p>
+                <p
+                  className="text-sm"
+                  style={{ color: 'var(--color-text-secondary)', fontFamily: 'var(--font-body)', lineHeight: 1.5 }}
+                >
+                  Without a phone number, you'll need to get your access code directly from your event organizer. Enter your phone number above to have it texted to you instead.
+                </p>
+                <div className="flex gap-3 mt-3">
+                  <button
+                    type="submit"
+                    className="pq-btn pq-btn-secondary flex-1"
+                    style={{ fontSize: '0.875rem', padding: '0.5rem 0' }}
+                  >
+                    Join without phone
+                  </button>
+                </div>
+              </div>
+            )}
+
             <button
               type="submit"
               disabled={submitting || !name.trim()}
+              style={{ display: showPhoneWarning ? 'none' : undefined }}
               className="pq-btn pq-btn-primary w-full"
               style={{
                 padding: '14px 0',

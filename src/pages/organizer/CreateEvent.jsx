@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase.js'
 import { useAuth } from '../../hooks/useAuth.js'
 import { generateCode, selectMissionsLeveledRoundRobin, insertParticipantWithRetry } from '../../lib/missions.js'
+import { normalizePhone } from '../../lib/phone.js'
 
 const EVENT_TYPE_DB_MAP = {
   'bachelorette/bachelor': 'bachelorette',
@@ -328,17 +329,22 @@ export default function CreateEvent() {
       setEventCode(code)
     }
 
-    // Parse names — only create participants for names actually entered
-    const names = participantNames
-      .split(/[\n,]/)
-      .map((n) => n.trim())
+    // Parse names — each line can be "Name" or "Name, phone"
+    const lines = participantNames
+      .split(/\n/)
+      .map((l) => l.trim())
       .filter(Boolean)
 
-    const participants = names.map((name) => ({
-      name,
-      accessCode: generateCode(6),
-      isNamed: true,
-    }))
+    const participants = lines.map((line) => {
+      const commaIdx = line.indexOf(',')
+      if (commaIdx !== -1) {
+        const name = line.slice(0, commaIdx).trim()
+        const rawPhone = line.slice(commaIdx + 1).trim()
+        const phone = normalizePhone(rawPhone)
+        return { name, phone, accessCode: generateCode(6), isNamed: true }
+      }
+      return { name: line, phone: null, accessCode: generateCode(6), isNamed: true }
+    })
     setGeneratedParticipants(participants)
   }
 
@@ -463,7 +469,7 @@ export default function CreateEvent() {
         if (generatedParticipants.length > 0) {
           const inserted = await Promise.all(
             generatedParticipants.map((p) =>
-              insertParticipantWithRetry(supabase, eventData.id, p.name, 'manual')
+              insertParticipantWithRetry(supabase, eventData.id, p.name, 'manual', 3, p.phone || null)
             )
           )
           allParticipants = inserted
@@ -924,13 +930,13 @@ export default function CreateEvent() {
                       ref={textareaRef}
                       value={participantNames}
                       onChange={(e) => setParticipantNames(e.target.value)}
-                      placeholder={"Jake\nSarah\nMike\nTaylor"}
+                      placeholder={"Jake, +15551234567\nSarah\nMike, (555) 867-5309\nTaylor"}
                       rows={4}
                       style={{ minHeight: '120px', maxHeight: '400px', overflow: 'auto', resize: 'none' }}
                       className="pq-input w-full"
                     />
                     <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.375rem' }}>
-                      One per line. These guests get access codes at launch. Everyone else joins via invite link.
+                      One per line. Add a comma and phone number to SMS participants when the event starts.
                     </p>
                   </div>
                 </div>
@@ -1537,6 +1543,7 @@ export default function CreateEvent() {
                         ['End', new Date(endTime).toLocaleString()],
                         ['Max participants', maxParticipants || 'No Limit'],
                         ['Pre-registered', generatedParticipants.length || 'None'],
+                        ['Will receive SMS', generatedParticipants.filter(p => p.phone).length > 0 ? `${generatedParticipants.filter(p => p.phone).length} of ${generatedParticipants.length}` : 'None'],
                         ['Missions each', missionCount],
                         ['Unlock', unlockType === 'all_at_once' ? 'All at once' : 'Timed release'],
                       ].map(([label, value]) => (

@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase.js'
 import { useAuth } from '../../hooks/useAuth.js'
 import { getAvatarColor, getInitials } from '../../lib/avatar.js'
 import { insertParticipantWithRetry, selectMissionsLeveledRoundRobin } from '../../lib/missions.js'
+import { normalizePhone } from '../../lib/phone.js'
 import Leaderboard from '../../components/Leaderboard.jsx'
 import ActivityFeed from '../../components/ActivityFeed.jsx'
 
@@ -35,6 +36,8 @@ export default function EventDetail() {
   // Add participant inline
   const [addingParticipant, setAddingParticipant] = useState(false)
   const [newParticipantName, setNewParticipantName] = useState('')
+  const [newParticipantPhone, setNewParticipantPhone] = useState('')
+  const [sendingSms, setSendingSms] = useState(false)
   // Drag and drop — use refs for reliable access in event handlers, state for visuals
   const [dragSource, _setDragSource] = useState(null)
   const [dropTarget, _setDropTarget] = useState(null)
@@ -94,7 +97,7 @@ export default function EventDetail() {
     // Get participants with their mission completion counts
     const { data: participantData } = await supabase
       .from('participants')
-      .select('id, name, access_code, joined_at, is_active, source')
+      .select('id, name, access_code, joined_at, is_active, source, phone, sms_sent_at')
       .eq('event_id', id)
       .order('name')
 
@@ -375,7 +378,8 @@ export default function EventDetail() {
     setError('')
 
     try {
-      const newPart = await insertParticipantWithRetry(supabase, id, newParticipantName.trim(), 'manual')
+      const phoneE164 = normalizePhone(newParticipantPhone)
+      const newPart = await insertParticipantWithRetry(supabase, id, newParticipantName.trim(), 'manual', 3, phoneE164)
 
       // If event is active, assign missions immediately
       if (event.status === 'active' && config) {
@@ -388,6 +392,7 @@ export default function EventDetail() {
       }
 
       setNewParticipantName('')
+      setNewParticipantPhone('')
       await loadData()
     } catch (err) {
       setError(err.message || 'Failed to add participant.')
@@ -404,6 +409,27 @@ export default function EventDetail() {
       .eq('id', participantId)
 
     await loadData()
+  }
+
+  async function handleSendSmsBlast() {
+    setSendingSms(true)
+    setError('')
+    try {
+      const { data, error: fnErr } = await supabase.functions.invoke('send-event-sms-blast', {
+        body: { eventId: id, scenario: 'event_started' },
+      })
+      if (fnErr) throw fnErr
+      if (data?.ok) {
+        setCopyToast(`SMS sent to ${data.sent} participant${data.sent !== 1 ? 's' : ''}`)
+        setTimeout(() => setCopyToast(''), 3000)
+        await loadData()
+      } else {
+        setError(data?.error || 'Failed to send SMS')
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to send SMS')
+    }
+    setSendingSms(false)
   }
 
   function handleSelectForSwap(participantIdx, missionIdx) {
@@ -1253,23 +1279,35 @@ export default function EventDetail() {
               >
                 Participants ({activeParticipants.length})
               </h3>
-              {activeParticipants.length > 0 && (
-                <button
-                  onClick={() => {
-                    const codes = activeParticipants
-                      .map((p) => `${p.name}: ${p.access_code}`)
-                      .join('\n')
-                    copyWithToast(
-                      `Event: ${event.name}\nEvent Code: ${event.event_code}\n\nAccess Codes:\n${codes}`,
-                      'All codes copied!'
-                    )
-                  }}
-                  className="pq-btn pq-btn-ghost"
-                  style={{ color: 'var(--color-primary)', fontSize: '0.8125rem' }}
-                >
-                  Copy All Codes
-                </button>
-              )}
+              <div className="flex items-center gap-2">
+                {!isEnded && activeParticipants.some(p => p.phone && !p.sms_sent_at) && (
+                  <button
+                    onClick={handleSendSmsBlast}
+                    disabled={sendingSms}
+                    className="pq-btn pq-btn-primary"
+                    style={{ fontSize: '0.8125rem', padding: '0.375rem 0.75rem' }}
+                  >
+                    {sendingSms ? 'Sending...' : 'Send SMS'}
+                  </button>
+                )}
+                {activeParticipants.length > 0 && (
+                  <button
+                    onClick={() => {
+                      const codes = activeParticipants
+                        .map((p) => `${p.name}: ${p.access_code}`)
+                        .join('\n')
+                      copyWithToast(
+                        `Event: ${event.name}\nEvent Code: ${event.event_code}\n\nAccess Codes:\n${codes}`,
+                        'All codes copied!'
+                      )
+                    }}
+                    className="pq-btn pq-btn-ghost"
+                    style={{ color: 'var(--color-primary)', fontSize: '0.8125rem' }}
+                  >
+                    Copy All Codes
+                  </button>
+                )}
+              </div>
             </div>
 
             {activeParticipants.length === 0 ? (
@@ -1294,8 +1332,9 @@ export default function EventDetail() {
                     background: 'var(--color-surface)',
                   }}
                 >
-                  <div className="col-span-4">Name</div>
-                  <div className="col-span-3">Access Code</div>
+                  <div className="col-span-3">Name</div>
+                  <div className="col-span-2">Access Code</div>
+                  <div className="col-span-2">Phone</div>
                   <div className="col-span-1 text-center">Source</div>
                   <div className="col-span-1 text-center">Joined</div>
                   <div className="col-span-2 text-right">Progress</div>
@@ -1313,7 +1352,7 @@ export default function EventDetail() {
                     onMouseEnter={(e) => e.currentTarget.style.background = 'var(--color-surface-hover)'}
                     onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                   >
-                    <div className="col-span-4 flex items-center gap-3">
+                    <div className="col-span-3 flex items-center gap-3">
                       <div
                         className="pq-avatar pq-avatar-sm"
                         style={{ background: getAvatarColor(p.name) }}
@@ -1332,7 +1371,7 @@ export default function EventDetail() {
                         {p.name}
                       </span>
                     </div>
-                    <div className="col-span-3">
+                    <div className="col-span-2">
                       <span
                         style={{
                           fontFamily: 'monospace',
@@ -1343,6 +1382,16 @@ export default function EventDetail() {
                       >
                         {p.access_code}
                       </span>
+                    </div>
+                    <div className="col-span-2 flex items-center gap-1">
+                      <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', fontFamily: 'var(--font-body)' }}>
+                        {p.phone ? `***-${p.phone.slice(-4)}` : '\u2014'}
+                      </span>
+                      {p.sms_sent_at && (
+                        <span className="pq-badge pq-badge-success" style={{ fontSize: '0.625rem', padding: '0.125rem 0.375rem' }}>
+                          SMS
+                        </span>
+                      )}
                     </div>
                     <div className="col-span-1 text-center">
                       <span className={`pq-badge ${p.source === 'self' ? 'pq-badge-primary' : 'pq-badge-muted'}`}>
@@ -1391,8 +1440,19 @@ export default function EventDetail() {
                     type="text"
                     value={newParticipantName}
                     onChange={(e) => setNewParticipantName(e.target.value)}
-                    placeholder="Add participant name..."
+                    placeholder="Name"
                     className="pq-input flex-1"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleAddParticipant()
+                    }}
+                  />
+                  <input
+                    type="tel"
+                    value={newParticipantPhone}
+                    onChange={(e) => setNewParticipantPhone(e.target.value)}
+                    placeholder="Phone (optional)"
+                    className="pq-input"
+                    style={{ width: '160px' }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') handleAddParticipant()
                     }}
