@@ -158,15 +158,19 @@ export default function Play() {
     const prev = missions.find(m => m.id === id)
     const justCompleted = completed && !prev?.completed
 
-    await supabase
-      .from('participant_missions')
-      .update({
-        completed,
-        notes: notes || null,
-        photo_url: photoUrl || null,
-        completed_at: completed ? new Date().toISOString() : null,
-      })
-      .eq('id', id)
+    const { error } = await supabase.rpc('rpc_complete_mission', {
+      p_access_code: accessCode,
+      p_mission_id: prev.mission_id,
+      p_notes: notes || null,
+      p_photo_url: photoUrl || null,
+    })
+
+    if (error) {
+      console.error('Mission completion failed:', error)
+      setToast('Error saving mission. Please try again.')
+      setTimeout(() => setToast(''), 3000)
+      return
+    }
 
     if (justCompleted) {
       fireConfetti()
