@@ -86,20 +86,15 @@ serve(async (req) => {
       || organizer?.user?.email?.split('@')[0]
       || 'Your host'
 
-    // Query participants with phone numbers
-    let query = supabase
+    // Query participants with phone numbers — always skip already-sent for idempotency
+    // This ensures retries never double-send to participants who already received SMS
+    const { data: participants } = await supabase
       .from('participants')
       .select('id, name, access_code, phone, sms_sent_at')
       .eq('event_id', eventId)
       .eq('is_active', true)
       .not('phone', 'is', null)
-
-    // For event_started, only send to those who haven't received SMS yet
-    if (scenario === 'event_started') {
-      query = query.is('sms_sent_at', null)
-    }
-
-    const { data: participants } = await query
+      .is('sms_sent_at', null)
 
     if (!participants || participants.length === 0) {
       return new Response(JSON.stringify({ ok: true, sent: 0, failed: 0 }), {
@@ -112,6 +107,7 @@ serve(async (req) => {
 
     let sent = 0
     let failed = 0
+    const failedNames: string[] = []
 
     const results = await Promise.all(
       participants.map(async (p) => {
@@ -155,28 +151,34 @@ serve(async (req) => {
           })
 
           if (res.ok) {
+            // Mark as sent ONLY after Twilio confirms delivery
             await supabase
               .from('participants')
               .update({ sms_sent_at: new Date().toISOString() })
               .eq('id', p.id)
-            return 'sent'
+            return { status: 'sent' }
           } else {
             const err = await res.text()
             console.error(`Failed to send to ${p.id}:`, err)
-            return 'failed'
+            return { status: 'failed', name: p.name }
           }
         } catch (err) {
           console.error(`Error sending to ${p.id}:`, err)
-          return 'failed'
+          return { status: 'failed', name: p.name }
         }
       })
     )
 
-    sent = results.filter((r) => r === 'sent').length
-    failed = results.filter((r) => r === 'failed').length
+    results.forEach((r) => {
+      if (r.status === 'sent') sent++
+      else {
+        failed++
+        if (r.name) failedNames.push(r.name)
+      }
+    })
 
     // Mark reminder rows as sent
-    if (scenario === 'reminder') {
+    if (scenario === 'reminder' && sent > 0) {
       await supabase
         .from('sms_reminders')
         .update({ sent: true })
@@ -184,7 +186,7 @@ serve(async (req) => {
         .eq('sent', false)
     }
 
-    return new Response(JSON.stringify({ ok: true, sent, failed }), {
+    return new Response(JSON.stringify({ ok: true, sent, failed, failedNames }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (err) {

@@ -81,6 +81,20 @@ export default function CreateEvent() {
   const [copyToast, setCopyToast] = useState('')
   const [copiedKey, setCopiedKey] = useState('')
 
+  // Warn on unsaved changes (browser close / tab close / navigation)
+  useEffect(() => {
+    function handleBeforeUnload(e) {
+      // Only warn if user has entered meaningful data and hasn't launched yet
+      if (launched) return
+      const hasData = eventName.trim() || participantNames.trim() || (step > 1)
+      if (!hasData) return
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [eventName, participantNames, step, launched])
+
   // Set default times (today evening)
   useEffect(() => {
     if (!startTime) {
@@ -1304,7 +1318,14 @@ export default function CreateEvent() {
             </div>
 
             {/* --- Advanced: Activity Feed Settings (collapsible) --- */}
-            <div className="pq-card" style={{ padding: 0, overflow: 'hidden' }}>
+            <div className="pq-card" style={{ padding: 0, overflow: 'hidden', opacity: (isEditMode && editEventStatus === 'active') ? 0.6 : 1 }}>
+              {isEditMode && editEventStatus === 'active' && (
+                <div style={{ padding: '0.75rem 2rem', backgroundColor: 'var(--color-warning-light, #fef3c7)', borderBottom: '1px solid var(--color-border-light)' }}>
+                  <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.75rem', color: 'var(--color-warning, #d97706)', margin: 0 }}>
+                    Feed settings are locked while the event is live to avoid confusing participants.
+                  </p>
+                </div>
+              )}
               <button
                 type="button"
                 onClick={() => setShowAdvancedFeed(!showAdvancedFeed)}
@@ -1366,6 +1387,7 @@ export default function CreateEvent() {
                       <button
                         type="button"
                         onClick={() => setFeedMode('secret')}
+                        disabled={isEditMode && editEventStatus === 'active'}
                         className={feedMode === 'secret' ? 'pq-btn pq-btn-primary' : 'pq-btn pq-btn-secondary'}
                         style={{ fontFamily: 'var(--font-body)', padding: '0.75rem 1rem', fontSize: '0.8rem' }}
                       >
@@ -1374,6 +1396,7 @@ export default function CreateEvent() {
                       <button
                         type="button"
                         onClick={() => setFeedMode('transparent')}
+                        disabled={isEditMode && editEventStatus === 'active'}
                         className={feedMode === 'transparent' ? 'pq-btn pq-btn-primary' : 'pq-btn pq-btn-secondary'}
                         style={{ fontFamily: 'var(--font-body)', padding: '0.75rem 1rem', fontSize: '0.8rem' }}
                       >
@@ -1394,6 +1417,7 @@ export default function CreateEvent() {
                         type="checkbox"
                         checked={feedPhotosEnabled}
                         onChange={(e) => setFeedPhotosEnabled(e.target.checked)}
+                        disabled={isEditMode && editEventStatus === 'active'}
                         style={{ accentColor: 'var(--color-primary)', width: '18px', height: '18px' }}
                       />
                       <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>
@@ -1409,6 +1433,7 @@ export default function CreateEvent() {
                         type="checkbox"
                         checked={feedCommentsEnabled}
                         onChange={(e) => setFeedCommentsEnabled(e.target.checked)}
+                        disabled={isEditMode && editEventStatus === 'active'}
                         style={{ accentColor: 'var(--color-primary)', width: '18px', height: '18px' }}
                       />
                       <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>
@@ -1424,6 +1449,7 @@ export default function CreateEvent() {
                         type="checkbox"
                         checked={feedReactionsEnabled}
                         onChange={(e) => setFeedReactionsEnabled(e.target.checked)}
+                        disabled={isEditMode && editEventStatus === 'active'}
                         style={{ accentColor: 'var(--color-primary)', width: '18px', height: '18px' }}
                       />
                       <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>
@@ -1439,6 +1465,7 @@ export default function CreateEvent() {
                         type="checkbox"
                         checked={feedInteractiveCommentsEnabled}
                         onChange={(e) => setFeedInteractiveCommentsEnabled(e.target.checked)}
+                        disabled={isEditMode && editEventStatus === 'active'}
                         style={{ accentColor: 'var(--color-primary)', width: '18px', height: '18px' }}
                       />
                       <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>

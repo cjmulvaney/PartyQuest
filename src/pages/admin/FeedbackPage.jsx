@@ -1,18 +1,22 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase.js'
+import { useAdminToast } from '../../hooks/useAdminToast.jsx'
 
 export default function FeedbackPage() {
+  const { toast } = useAdminToast()
   const [feedback, setFeedback] = useState([])
   const [loading, setLoading] = useState(true)
   const [filterEvent, setFilterEvent] = useState('all')
   const [events, setEvents] = useState([])
+  const [search, setSearch] = useState('')
+  const [sortDir, setSortDir] = useState('desc')
 
   useEffect(() => {
     loadData()
   }, [])
 
   async function loadData() {
-    const [{ data: fb }, { data: ev }] = await Promise.all([
+    const [{ data: fb, error: fbErr }, { data: ev, error: evErr }] = await Promise.all([
       supabase
         .from('feedback')
         .select('id, text, created_at, event_id, participant_id, events(name), participants(name)')
@@ -23,15 +27,64 @@ export default function FeedbackPage() {
         .neq('status', 'draft')
         .order('name'),
     ])
+    if (fbErr) toast.error(`Failed to load feedback: ${fbErr.message}`)
+    if (evErr) toast.error(`Failed to load events: ${evErr.message}`)
     setFeedback(fb || [])
     setEvents(ev || [])
     setLoading(false)
   }
 
-  const filtered =
-    filterEvent === 'all'
-      ? feedback
-      : feedback.filter((f) => f.event_id === filterEvent)
+  async function deleteFeedback(item) {
+    if (!confirm('Delete this feedback entry? This cannot be undone.')) return
+    const { error } = await supabase.from('feedback').delete().eq('id', item.id)
+    if (error) {
+      toast.error(`Failed to delete feedback: ${error.message}`)
+      return
+    }
+    setFeedback((prev) => prev.filter((f) => f.id !== item.id))
+    toast.success('Feedback deleted')
+  }
+
+  const filtered = useMemo(() => {
+    let result = feedback
+    if (filterEvent !== 'all') {
+      result = result.filter((f) => f.event_id === filterEvent)
+    }
+    if (search) {
+      const q = search.toLowerCase()
+      result = result.filter(
+        (f) =>
+          f.text.toLowerCase().includes(q) ||
+          f.participants?.name?.toLowerCase().includes(q) ||
+          f.events?.name?.toLowerCase().includes(q)
+      )
+    }
+    if (sortDir === 'asc') {
+      result = [...result].reverse()
+    }
+    return result
+  }, [feedback, filterEvent, search, sortDir])
+
+  function exportCsv() {
+    const rows = [['Feedback', 'Event', 'Participant', 'Date']]
+    filtered.forEach((f) => {
+      rows.push([
+        `"${(f.text || '').replace(/"/g, '""')}"`,
+        `"${(f.events?.name || '').replace(/"/g, '""')}"`,
+        `"${(f.participants?.name || '').replace(/"/g, '""')}"`,
+        f.created_at ? new Date(f.created_at).toLocaleDateString() : '',
+      ])
+    })
+    const csv = rows.map((r) => r.join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `party-quest-feedback-${new Date().toISOString().split('T')[0]}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+    toast.success(`Exported ${filtered.length} feedback entries`)
+  }
 
   if (loading) {
     return (
@@ -43,7 +96,7 @@ export default function FeedbackPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2
             className="text-2xl font-bold"
@@ -51,22 +104,31 @@ export default function FeedbackPage() {
           >
             Feedback
           </h2>
-          <p
-            className="text-sm mt-1"
-            style={{ color: 'var(--color-text-muted)' }}
-          >
+          <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>
             {filtered.length} response{filtered.length !== 1 ? 's' : ''}
+            {filtered.length !== feedback.length && ` of ${feedback.length} total`}
           </p>
         </div>
+        <button onClick={exportCsv} className="pq-btn pq-btn-secondary" style={{ fontSize: '0.8125rem' }}>
+          Export CSV
+        </button>
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-3">
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search feedback..."
+          className="pq-input"
+          style={{ width: '250px' }}
+        />
         <select
           value={filterEvent}
           onChange={(e) => setFilterEvent(e.target.value)}
           className="pq-input"
-          style={{
-            width: 'auto',
-            minWidth: '200px',
-            cursor: 'pointer',
-          }}
+          style={{ width: 'auto', minWidth: '200px', cursor: 'pointer' }}
         >
           <option value="all">All Events ({feedback.length})</option>
           {events.map((ev) => (
@@ -75,17 +137,19 @@ export default function FeedbackPage() {
             </option>
           ))}
         </select>
+        <button
+          onClick={() => setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))}
+          className="pq-btn pq-btn-ghost"
+          style={{ fontSize: '0.8125rem' }}
+        >
+          {sortDir === 'desc' ? 'Newest first' : 'Oldest first'} {sortDir === 'desc' ? '\u25BC' : '\u25B2'}
+        </button>
       </div>
 
       {filtered.length === 0 ? (
-        <div
-          className="pq-card text-center py-12"
-        >
-          <p
-            className="text-sm"
-            style={{ color: 'var(--color-text-muted)' }}
-          >
-            No feedback yet.
+        <div className="pq-card text-center py-12">
+          <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+            {feedback.length === 0 ? 'No feedback yet.' : 'No feedback matches your filters.'}
           </p>
         </div>
       ) : (
@@ -94,42 +158,26 @@ export default function FeedbackPage() {
             <div
               key={f.id}
               className="pq-card"
-              style={{
-                transition: 'var(--transition-fast)',
-              }}
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.borderColor = 'var(--color-border-strong)')
-              }
-              onMouseLeave={(e) =>
-                (e.currentTarget.style.borderColor = 'var(--color-border)')
-              }
+              style={{ transition: 'var(--transition-fast)' }}
+              onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--color-border-strong)')}
+              onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--color-border)')}
             >
-              <p
-                className="text-sm leading-relaxed"
-                style={{ color: 'var(--color-text)' }}
-              >
+              <p className="text-sm leading-relaxed" style={{ color: 'var(--color-text)' }}>
                 {f.text}
               </p>
-              <div className="flex items-center gap-3 mt-3 pt-3"
+              <div
+                className="flex items-center gap-3 mt-3 pt-3"
                 style={{ borderTop: '1px solid var(--color-border-light)' }}
               >
                 {f.events?.name && (
-                  <span className="pq-badge pq-badge-primary">
-                    {f.events.name}
-                  </span>
+                  <span className="pq-badge pq-badge-primary">{f.events.name}</span>
                 )}
                 {f.participants?.name && (
-                  <span
-                    className="text-xs font-medium"
-                    style={{ color: 'var(--color-text-secondary)' }}
-                  >
+                  <span className="text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>
                     by {f.participants.name}
                   </span>
                 )}
-                <span
-                  className="text-xs ml-auto"
-                  style={{ color: 'var(--color-text-muted)' }}
-                >
+                <span className="text-xs ml-auto" style={{ color: 'var(--color-text-muted)' }}>
                   {new Date(f.created_at).toLocaleDateString('en-US', {
                     month: 'short',
                     day: 'numeric',
@@ -137,6 +185,18 @@ export default function FeedbackPage() {
                     minute: '2-digit',
                   })}
                 </span>
+                <button
+                  onClick={() => deleteFeedback(f)}
+                  className="pq-btn pq-btn-ghost"
+                  title="Delete feedback"
+                  style={{
+                    fontSize: '0.75rem',
+                    color: 'var(--color-danger, #dc2626)',
+                    padding: '0.25rem 0.5rem',
+                  }}
+                >
+                  Delete
+                </button>
               </div>
             </div>
           ))}

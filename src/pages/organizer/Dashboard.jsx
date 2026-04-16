@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase.js'
 import { useAuth } from '../../hooks/useAuth.js'
 import { useTheme } from '../../hooks/useTheme.jsx'
+import { generateCode } from '../../lib/missions.js'
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -10,6 +11,10 @@ export default function Dashboard() {
   const { theme, toggleTheme } = useTheme()
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
+  const [cloning, setCloning] = useState(null) // event id being cloned
+  const [sortKey, setSortKey] = useState('created_at')
+  const [sortDir, setSortDir] = useState('desc')
+  const [filterStatus, setFilterStatus] = useState('all')
   const [showGuide, setShowGuide] = useState(
     () => !localStorage.getItem('pq_organizer_guide_dismissed')
   )
@@ -17,7 +22,6 @@ export default function Dashboard() {
   useEffect(() => {
     if (authLoading) return
     if (!user) {
-      // Don't auto-sign-in if user just signed out
       if (sessionStorage.getItem('pq_signed_out')) {
         navigate('/')
         return
@@ -25,7 +29,6 @@ export default function Dashboard() {
       signInWithGoogle()
       return
     }
-    // Clear the signed-out flag on successful auth
     sessionStorage.removeItem('pq_signed_out')
     loadEvents()
   }, [user, authLoading])
@@ -40,21 +43,148 @@ export default function Dashboard() {
       .order('created_at', { ascending: false })
 
     if (data) {
-      // Get participant counts for each event
-      const eventsWithCounts = await Promise.all(
-        data.map(async (event) => {
-          const { count } = await supabase
-            .from('participants')
-            .select('id', { count: 'exact', head: true })
-            .eq('event_id', event.id)
-          return { ...event, participantCount: count || 0 }
-        })
-      )
-      setEvents(eventsWithCounts)
+      const eventIds = data.map((e) => e.id)
+
+      // Batch: get all participants + mission stats in two queries instead of N+1
+      const [{ data: allParticipants }, { data: allPMRaw }] = await Promise.all([
+        supabase
+          .from('participants')
+          .select('id, event_id')
+          .in('event_id', eventIds),
+        // We need participant IDs to query participant_missions
+        supabase
+          .from('participants')
+          .select('id, event_id')
+          .in('event_id', eventIds),
+      ])
+
+      const participantIds = (allParticipants || []).map((p) => p.id)
+
+      // Get all participant_missions for these participants
+      let allMissions = []
+      if (participantIds.length > 0) {
+        for (let i = 0; i < participantIds.length; i += 500) {
+          const chunk = participantIds.slice(i, i + 500)
+          const { data: pmData } = await supabase
+            .from('participant_missions')
+            .select('participant_id, completed')
+            .in('participant_id', chunk)
+          if (pmData) allMissions.push(...pmData)
+        }
+      }
+
+      // Build lookup maps
+      const participantsByEvent = {}
+      const participantToEvent = {}
+      ;(allParticipants || []).forEach((p) => {
+        if (!participantsByEvent[p.event_id]) participantsByEvent[p.event_id] = []
+        participantsByEvent[p.event_id].push(p.id)
+        participantToEvent[p.id] = p.event_id
+      })
+
+      const missionsByEvent = {}
+      allMissions.forEach((pm) => {
+        const eventId = participantToEvent[pm.participant_id]
+        if (!eventId) return
+        if (!missionsByEvent[eventId]) missionsByEvent[eventId] = { total: 0, completed: 0 }
+        missionsByEvent[eventId].total++
+        if (pm.completed) missionsByEvent[eventId].completed++
+      })
+
+      const eventsWithStats = data.map((event) => {
+        const stats = missionsByEvent[event.id] || { total: 0, completed: 0 }
+        return {
+          ...event,
+          participantCount: (participantsByEvent[event.id] || []).length,
+          totalMissions: stats.total,
+          completedMissions: stats.completed,
+          completionRate: stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0,
+        }
+      })
+      setEvents(eventsWithStats)
     }
 
     setLoading(false)
   }
+
+  async function handleClone(e, event) {
+    e.stopPropagation()
+    setCloning(event.id)
+    try {
+      const now = new Date()
+      now.setHours(19, 0, 0, 0)
+      const end = new Date(now)
+      end.setHours(23, 0, 0, 0)
+
+      const code = generateCode(6)
+
+      // Get config from original event
+      const { data: origConfig } = await supabase
+        .from('event_config')
+        .select('*')
+        .eq('event_id', event.id)
+        .single()
+
+      const { data: newEvent, error: eventErr } = await supabase
+        .from('events')
+        .insert({
+          organizer_id: user.id,
+          name: `${event.name} (Copy)`,
+          event_type: event.event_type || 'house party',
+          start_time: now.toISOString(),
+          end_time: end.toISOString(),
+          event_code: code,
+          status: 'upcoming',
+        })
+        .select()
+        .single()
+
+      if (eventErr) throw eventErr
+
+      if (origConfig) {
+        await supabase.from('event_config').insert({
+          event_id: newEvent.id,
+          mission_count: origConfig.mission_count,
+          unlock_type: origConfig.unlock_type,
+          unlock_schedule: origConfig.unlock_schedule,
+          tag_filters: origConfig.tag_filters,
+        })
+      }
+
+      navigate(`/organizer/event/${newEvent.id}`)
+    } catch (err) {
+      console.error('Clone failed:', err)
+      alert(err.message || 'Failed to clone event')
+    }
+    setCloning(null)
+  }
+
+  // Sorting + filtering
+  const sortedFiltered = useMemo(() => {
+    let result = [...events]
+    if (filterStatus !== 'all') {
+      if (filterStatus === 'active_upcoming') {
+        result = result.filter((e) => e.status === 'active' || e.status === 'upcoming')
+      } else {
+        result = result.filter((e) => e.status === filterStatus)
+      }
+    }
+    result.sort((a, b) => {
+      let aVal = a[sortKey]
+      let bVal = b[sortKey]
+      if (typeof aVal === 'string') {
+        aVal = (aVal || '').toLowerCase()
+        bVal = (bVal || '').toLowerCase()
+      }
+      if (aVal < bVal) return sortDir === 'asc' ? -1 : 1
+      if (aVal > bVal) return sortDir === 'asc' ? 1 : -1
+      return 0
+    })
+    return result
+  }, [events, filterStatus, sortKey, sortDir])
+
+  const activeEvents = sortedFiltered.filter((e) => e.status === 'active' || e.status === 'upcoming')
+  const pastEvents = sortedFiltered.filter((e) => e.status === 'ended')
 
   if (authLoading || (!user && !authLoading)) {
     return (
@@ -72,11 +202,6 @@ export default function Dashboard() {
     )
   }
 
-  const activeEvents = events.filter(
-    (e) => e.status === 'active' || e.status === 'upcoming'
-  )
-  const pastEvents = events.filter((e) => e.status === 'ended')
-
   return (
     <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
       {/* Header Bar */}
@@ -92,10 +217,7 @@ export default function Dashboard() {
           <div className="flex items-center gap-6">
             <h1
               className="text-2xl font-bold cursor-pointer"
-              style={{
-                fontFamily: 'var(--font-heading)',
-                color: 'var(--color-primary)',
-              }}
+              style={{ fontFamily: 'var(--font-heading)', color: 'var(--color-primary)' }}
               onClick={() => navigate('/organizer')}
             >
               Party Quest
@@ -177,6 +299,43 @@ export default function Dashboard() {
             + New Event
           </button>
         </div>
+
+        {/* Sort + Filter controls */}
+        {events.length > 1 && (
+          <div className="flex flex-wrap items-center gap-3 mb-6 animate-fade-in stagger-2">
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="pq-input"
+              style={{ width: 'auto', fontSize: '0.8125rem' }}
+            >
+              <option value="all">All Statuses</option>
+              <option value="active_upcoming">Active & Upcoming</option>
+              <option value="active">Active Only</option>
+              <option value="upcoming">Upcoming Only</option>
+              <option value="ended">Ended Only</option>
+            </select>
+            <select
+              value={`${sortKey}:${sortDir}`}
+              onChange={(e) => {
+                const [k, d] = e.target.value.split(':')
+                setSortKey(k)
+                setSortDir(d)
+              }}
+              className="pq-input"
+              style={{ width: 'auto', fontSize: '0.8125rem' }}
+            >
+              <option value="created_at:desc">Newest First</option>
+              <option value="created_at:asc">Oldest First</option>
+              <option value="start_time:desc">Start Date (latest)</option>
+              <option value="start_time:asc">Start Date (earliest)</option>
+              <option value="name:asc">Name (A-Z)</option>
+              <option value="name:desc">Name (Z-A)</option>
+              <option value="participantCount:desc">Most Participants</option>
+              <option value="completionRate:desc">Highest Completion</option>
+            </select>
+          </div>
+        )}
 
         {/* First-time organizer guide */}
         {showGuide && (
@@ -293,6 +452,8 @@ export default function Dashboard() {
                       key={event.id}
                       event={event}
                       onClick={() => navigate(`/organizer/event/${event.id}`)}
+                      onClone={(e) => handleClone(e, event)}
+                      cloning={cloning === event.id}
                       staggerIndex={i}
                     />
                   ))}
@@ -322,6 +483,8 @@ export default function Dashboard() {
                       key={event.id}
                       event={event}
                       onClick={() => navigate(`/organizer/event/${event.id}`)}
+                      onClone={(e) => handleClone(e, event)}
+                      cloning={cloning === event.id}
                       isPast
                       staggerIndex={i}
                     />
@@ -336,7 +499,7 @@ export default function Dashboard() {
   )
 }
 
-function EventCard({ event, onClick, isPast = false, staggerIndex = 0 }) {
+function EventCard({ event, onClick, onClone, cloning = false, isPast = false, staggerIndex = 0 }) {
   const statusLabel =
     event.status === 'active'
       ? 'Live'
@@ -443,29 +606,89 @@ function EventCard({ event, onClick, isPast = false, staggerIndex = 0 }) {
           )}
         </div>
 
-        {/* Bottom arrow indicator */}
-        <div
-          className="flex items-center justify-end mt-1"
-          style={{ color: 'var(--color-primary)' }}
-        >
-          <span
-            className="text-sm font-medium"
-            style={{ fontFamily: 'var(--font-body)' }}
+        {/* Completion rate bar */}
+        {event.totalMissions > 0 && (
+          <div className="mt-1">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs" style={{ color: 'var(--color-text-muted)', fontFamily: 'var(--font-body)' }}>
+                {event.completedMissions}/{event.totalMissions} missions
+              </span>
+              <span
+                className="text-xs font-semibold"
+                style={{
+                  color: event.completionRate >= 75
+                    ? 'var(--color-success)'
+                    : event.completionRate >= 40
+                    ? 'var(--color-warning)'
+                    : 'var(--color-primary)',
+                  fontFamily: 'var(--font-body)',
+                }}
+              >
+                {event.completionRate}%
+              </span>
+            </div>
+            <div
+              style={{
+                height: '4px',
+                backgroundColor: 'var(--color-border-light)',
+                borderRadius: 'var(--radius-full)',
+                overflow: 'hidden',
+              }}
+            >
+              <div
+                style={{
+                  width: `${event.completionRate}%`,
+                  height: '100%',
+                  backgroundColor: event.completionRate >= 75
+                    ? 'var(--color-success)'
+                    : event.completionRate >= 40
+                    ? 'var(--color-warning)'
+                    : 'var(--color-primary)',
+                  borderRadius: 'var(--radius-full)',
+                  transition: 'width 0.3s ease',
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Bottom row: manage + clone */}
+        <div className="flex items-center justify-between mt-1">
+          <button
+            onClick={onClone}
+            disabled={cloning}
+            className="pq-btn pq-btn-ghost"
+            style={{
+              fontSize: '0.75rem',
+              color: 'var(--color-text-muted)',
+              padding: '0.25rem 0.5rem',
+            }}
           >
-            Manage
-          </span>
-          <svg
-            width="16" height="16" viewBox="0 0 16 16" fill="none"
-            className="ml-1"
+            {cloning ? 'Cloning...' : 'Clone'}
+          </button>
+          <div
+            className="flex items-center"
+            style={{ color: 'var(--color-primary)' }}
           >
-            <path
-              d="M6 4l4 4-4 4"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
+            <span
+              className="text-sm font-medium"
+              style={{ fontFamily: 'var(--font-body)' }}
+            >
+              Manage
+            </span>
+            <svg
+              width="16" height="16" viewBox="0 0 16 16" fill="none"
+              className="ml-1"
+            >
+              <path
+                d="M6 4l4 4-4 4"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </div>
         </div>
       </div>
     </button>

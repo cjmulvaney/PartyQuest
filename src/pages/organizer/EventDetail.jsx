@@ -55,15 +55,20 @@ export default function EventDetail() {
   const [copyToast, setCopyToast] = useState('')
   const [copiedKey, setCopiedKey] = useState('')
 
+  const copyIdRef = useRef(0)
   async function copyWithToast(text, label, key) {
     try {
       await navigator.clipboard.writeText(text)
+      const myId = ++copyIdRef.current
       setCopyToast(label || 'Copied!')
-      setTimeout(() => setCopyToast(''), 2000)
-      if (key) {
-        setCopiedKey(key)
-        setTimeout(() => setCopiedKey(''), 2000)
-      }
+      if (key) setCopiedKey(key)
+      setTimeout(() => {
+        // Only clear if this is still the most recent copy
+        if (copyIdRef.current === myId) {
+          setCopyToast('')
+          setCopiedKey('')
+        }
+      }, 2000)
     } catch {
       // Clipboard API failed (non-HTTPS or denied) — don't show false success
     }
@@ -378,6 +383,16 @@ export default function EventDetail() {
     setError('')
 
     try {
+      // Enforce max participant limit before inserting
+      if (event.max_participants) {
+        const activeCount = participants.filter((p) => p.is_active !== false).length
+        if (activeCount >= event.max_participants) {
+          setError(`Cannot add participant: event is full (${event.max_participants} max).`)
+          setAddingParticipant(false)
+          return
+        }
+      }
+
       const phoneE164 = normalizePhone(newParticipantPhone)
       const newPart = await insertParticipantWithRetry(supabase, id, newParticipantName.trim(), 'manual', 3, phoneE164)
 
@@ -797,11 +812,14 @@ export default function EventDetail() {
   }
 
   async function handleSaveAssignments() {
-    // Validate no empty slots
+    if (!hasUnsavedChanges) return
+    // Check for empty slots
     const empty = localAssignments?.reduce((count, p) =>
       count + p.missions.filter(pm => !pm?.mission_id).length, 0
     ) ?? 0
-    if (empty > 0 || !hasUnsavedChanges) return
+    if (empty > 0) {
+      if (!confirm(`${empty} mission slot${empty !== 1 ? 's are' : ' is'} still empty (mission pool may be exhausted). Save anyway? Empty slots will be skipped.`)) return
+    }
 
     setSaving(true)
     setError('')

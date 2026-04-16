@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase.js'
+import { useAdminToast } from '../../hooks/useAdminToast.jsx'
 
 export default function MissionsPage() {
+  const { toast } = useAdminToast()
   const [missions, setMissions] = useState([])
   const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(true)
@@ -12,6 +14,7 @@ export default function MissionsPage() {
   const [editing, setEditing] = useState(null)
   const [showAdd, setShowAdd] = useState(false)
   const [showAddCategory, setShowAddCategory] = useState(false)
+  const [editingCategory, setEditingCategory] = useState(null)
   const [newCatName, setNewCatName] = useState('')
   const [newCatDesc, setNewCatDesc] = useState('')
   const [csvStatus, setCsvStatus] = useState('')
@@ -28,13 +31,15 @@ export default function MissionsPage() {
   }, [])
 
   async function loadData() {
-    const [{ data: m }, { data: c }] = await Promise.all([
+    const [{ data: m, error: mErr }, { data: c, error: cErr }] = await Promise.all([
       supabase
         .from('missions')
         .select('id, text, active, tags, category_id, creator_name, categories(name)')
         .order('created_at', { ascending: false }),
       supabase.from('categories').select('id, name, description').order('name'),
     ])
+    if (mErr) toast.error(`Failed to load missions: ${mErr.message}`)
+    if (cErr) toast.error(`Failed to load categories: ${cErr.message}`)
     setMissions(m || [])
     setCategories(c || [])
     if (c?.length && !newCategory) setNewCategory(c[0].id)
@@ -47,13 +52,29 @@ export default function MissionsPage() {
   const allTags = [...new Set(missions.flatMap((m) => m.tags || []))].sort()
 
   async function toggleActive(mission) {
-    await supabase
+    const { error } = await supabase
       .from('missions')
       .update({ active: !mission.active })
       .eq('id', mission.id)
+    if (error) {
+      toast.error(`Failed to toggle mission: ${error.message}`)
+      return
+    }
     setMissions((prev) =>
       prev.map((m) => (m.id === mission.id ? { ...m, active: !m.active } : m))
     )
+    toast.success(mission.active ? 'Mission deactivated' : 'Mission activated')
+  }
+
+  async function deleteMission(mission) {
+    if (!confirm(`Permanently delete this mission?\n\n"${mission.text.substring(0, 100)}..."\n\nThis cannot be undone.`)) return
+    const { error } = await supabase.from('missions').delete().eq('id', mission.id)
+    if (error) {
+      toast.error(`Failed to delete mission: ${error.message}`)
+      return
+    }
+    setMissions((prev) => prev.filter((m) => m.id !== mission.id))
+    toast.success('Mission permanently deleted')
   }
 
   async function saveMission(id, text, categoryId, tags) {
@@ -61,20 +82,25 @@ export default function MissionsPage() {
       .split(',')
       .map((t) => t.trim().toLowerCase())
       .filter(Boolean)
-    await supabase
+    const { error } = await supabase
       .from('missions')
       .update({ text, category_id: categoryId, tags: tagArr })
       .eq('id', id)
+    if (error) {
+      toast.error(`Failed to save mission: ${error.message}`)
+      return
+    }
     // Re-fetch to get updated category name
     const { data } = await supabase
       .from('missions')
-      .select('id, text, active, tags, category_id, categories(name)')
+      .select('id, text, active, tags, category_id, creator_name, categories(name)')
       .eq('id', id)
       .single()
     if (data) {
       setMissions((prev) => prev.map((m) => (m.id === id ? data : m)))
     }
     setEditing(null)
+    toast.success('Mission saved')
   }
 
   async function addMission() {
@@ -94,12 +120,17 @@ export default function MissionsPage() {
       })
       .select('id, text, active, tags, category_id, creator_name, categories(name)')
       .single()
-    if (!error && data) {
+    if (error) {
+      toast.error(`Failed to add mission: ${error.message}`)
+      return
+    }
+    if (data) {
       setMissions((prev) => [data, ...prev])
       setNewText('')
       setNewTags('')
       setNewCreatorName('')
       setShowAdd(false)
+      toast.success('Mission created')
     }
   }
 
@@ -110,13 +141,68 @@ export default function MissionsPage() {
       .insert({ name: newCatName.trim(), description: newCatDesc.trim() || null })
       .select()
       .single()
-    if (!error && data) {
+    if (error) {
+      toast.error(`Failed to create category: ${error.message}`)
+      return
+    }
+    if (data) {
       setCategories((prev) => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)))
       setSelectedCategories((prev) => new Set([...prev, data.id]))
       setNewCatName('')
       setNewCatDesc('')
       setShowAddCategory(false)
+      toast.success(`Category "${data.name}" created`)
     }
+  }
+
+  async function updateCategory(id, name, description) {
+    const { error } = await supabase
+      .from('categories')
+      .update({ name: name.trim(), description: description?.trim() || null })
+      .eq('id', id)
+    if (error) {
+      toast.error(`Failed to update category: ${error.message}`)
+      return
+    }
+    setCategories((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, name: name.trim(), description: description?.trim() || null } : c))
+        .sort((a, b) => a.name.localeCompare(b.name))
+    )
+    // Update mission category names in local state
+    setMissions((prev) =>
+      prev.map((m) =>
+        m.category_id === id ? { ...m, categories: { name: name.trim() } } : m
+      )
+    )
+    setEditingCategory(null)
+    toast.success('Category updated')
+  }
+
+  async function deleteCategory(cat) {
+    const missionCount = missions.filter((m) => m.category_id === cat.id).length
+    const msg = missionCount > 0
+      ? `Delete category "${cat.name}"?\n\n${missionCount} mission(s) in this category will have their category set to none.\n\nThis cannot be undone.`
+      : `Delete category "${cat.name}"?\n\nThis cannot be undone.`
+    if (!confirm(msg)) return
+
+    const { error } = await supabase.from('categories').delete().eq('id', cat.id)
+    if (error) {
+      toast.error(`Failed to delete category: ${error.message}`)
+      return
+    }
+    setCategories((prev) => prev.filter((c) => c.id !== cat.id))
+    setSelectedCategories((prev) => {
+      const next = new Set(prev)
+      next.delete(cat.id)
+      return next
+    })
+    // Missions with this category will now have category_id = null (ON DELETE SET NULL)
+    setMissions((prev) =>
+      prev.map((m) =>
+        m.category_id === cat.id ? { ...m, category_id: null, categories: null } : m
+      )
+    )
+    toast.success(`Category "${cat.name}" deleted`)
   }
 
   async function handleCsvUpload(e) {
@@ -169,7 +255,7 @@ export default function MissionsPage() {
           .select()
           .single()
         if (catErr) {
-          errors.push(`Line ${i + 1}: failed to create category "${categoryName}"`)
+          errors.push(`Line ${i + 1}: failed to create category "${categoryName}" — ${catErr.message}`)
           continue
         }
         cat = newCat
@@ -196,7 +282,9 @@ export default function MissionsPage() {
     }
 
     if (rows.length === 0) {
-      setCsvStatus(`No valid rows found. ${errors.length} error(s).`)
+      const msg = `No valid rows found. ${errors.length} error(s).`
+      setCsvStatus(msg)
+      toast.warning(msg)
       return
     }
 
@@ -206,7 +294,9 @@ export default function MissionsPage() {
     const unique = rows.filter((r) => !existingTexts.has(r.text.toLowerCase()))
 
     if (unique.length === 0) {
-      setCsvStatus(`All ${rows.length} missions already exist.`)
+      const msg = `All ${rows.length} missions already exist.`
+      setCsvStatus(msg)
+      toast.info(msg)
       return
     }
 
@@ -215,20 +305,43 @@ export default function MissionsPage() {
     const { data, error } = await supabase
       .from('missions')
       .insert(unique)
-      .select('id, text, active, tags, category_id, categories(name)')
+      .select('id, text, active, tags, category_id, creator_name, categories(name)')
 
     if (error) {
       setCsvStatus(`Error: ${error.message}`)
+      toast.error(`CSV import failed: ${error.message}`)
     } else {
       setMissions((prev) => [...(data || []), ...prev])
       const msg = [`Imported ${data?.length || 0} missions.`]
       if (newCategories.size > 0) msg.push(`Created ${newCategories.size} new category(s): ${[...newCategories].join(', ')}.`)
       if (dupes.length) msg.push(`${dupes.length} duplicates skipped.`)
       if (errors.length) msg.push(`${errors.length} row errors.`)
-      setCsvStatus(msg.join(' '))
+      const fullMsg = msg.join(' ')
+      setCsvStatus(fullMsg)
+      toast.success(fullMsg)
     }
 
     if (fileRef.current) fileRef.current.value = ''
+  }
+
+  function exportCsv() {
+    const rows = [['text', 'category', 'tags']]
+    const source = statusFilter === 'all' ? missions : filtered
+    source.forEach((m) => {
+      const text = `"${(m.text || '').replace(/"/g, '""')}"`
+      const cat = `"${(m.categories?.name || '').replace(/"/g, '""')}"`
+      const tags = `"${(m.tags || []).join(',')}"`
+      rows.push([text, cat, tags])
+    })
+    const csv = rows.map((r) => r.join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `party-quest-missions-${new Date().toISOString().split('T')[0]}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+    toast.success(`Exported ${source.length} missions`)
   }
 
   function toggleCategory(catId) {
@@ -279,14 +392,14 @@ export default function MissionsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <h2
           className="text-2xl font-bold"
           style={{ color: 'var(--color-text)', fontFamily: 'var(--font-heading)' }}
         >
           Mission Library
         </h2>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={() => { setShowAddCategory(!showAddCategory); setShowAdd(false) }}
             className="pq-btn pq-btn-secondary"
@@ -309,6 +422,9 @@ export default function MissionsPage() {
               className="hidden"
             />
           </label>
+          <button onClick={exportCsv} className="pq-btn pq-btn-secondary">
+            Export CSV
+          </button>
         </div>
       </div>
 
@@ -349,6 +465,7 @@ export default function MissionsPage() {
             placeholder="Category name"
             className="pq-input w-full"
             autoFocus
+            onKeyDown={(e) => e.key === 'Enter' && addCategory()}
           />
           <input
             type="text"
@@ -356,6 +473,7 @@ export default function MissionsPage() {
             onChange={(e) => setNewCatDesc(e.target.value)}
             placeholder="Description (optional)"
             className="pq-input w-full"
+            onKeyDown={(e) => e.key === 'Enter' && addCategory()}
           />
           <div className="flex gap-2">
             <button onClick={addCategory} className="pq-btn pq-btn-primary">
@@ -424,7 +542,7 @@ export default function MissionsPage() {
         </div>
       )}
 
-      {/* Category toggles */}
+      {/* Category toggles with edit/delete */}
       <div className="pq-card space-y-3">
         <div className="flex items-center justify-between">
           <h3
@@ -452,25 +570,55 @@ export default function MissionsPage() {
             const isOn = selectedCategories.has(cat.id)
             const count = missions.filter((m) => m.category_id === cat.id).length
             return (
-              <button
-                key={cat.id}
-                onClick={() => toggleCategory(cat.id)}
-                className={isOn ? 'pq-badge pq-badge-primary' : 'pq-badge pq-badge-muted'}
-                style={{
-                  cursor: 'pointer',
-                  border: 'none',
-                  fontSize: '0.8125rem',
-                  fontFamily: 'var(--font-body)',
-                  padding: '0.375rem 0.75rem',
-                  transition: 'var(--transition-fast)',
-                  opacity: isOn ? 1 : 0.6,
-                }}
-              >
-                {cat.name} ({count})
-              </button>
+              <div key={cat.id} className="flex items-center gap-0.5">
+                <button
+                  onClick={() => toggleCategory(cat.id)}
+                  className={isOn ? 'pq-badge pq-badge-primary' : 'pq-badge pq-badge-muted'}
+                  style={{
+                    cursor: 'pointer',
+                    border: 'none',
+                    fontSize: '0.8125rem',
+                    fontFamily: 'var(--font-body)',
+                    padding: '0.375rem 0.75rem',
+                    transition: 'var(--transition-fast)',
+                    opacity: isOn ? 1 : 0.6,
+                  }}
+                >
+                  {cat.name} ({count})
+                </button>
+                <button
+                  onClick={() => setEditingCategory(editingCategory === cat.id ? null : cat.id)}
+                  title="Edit category"
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    color: 'var(--color-text-muted)', fontSize: '0.75rem', padding: '0.25rem',
+                  }}
+                >
+                  &#9998;
+                </button>
+                <button
+                  onClick={() => deleteCategory(cat)}
+                  title="Delete category"
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    color: 'var(--color-danger, #dc2626)', fontSize: '0.75rem', padding: '0.25rem',
+                  }}
+                >
+                  &times;
+                </button>
+              </div>
             )
           })}
         </div>
+
+        {/* Inline category editor */}
+        {editingCategory && (
+          <CategoryEditor
+            category={categories.find((c) => c.id === editingCategory)}
+            onSave={updateCategory}
+            onCancel={() => setEditingCategory(null)}
+          />
+        )}
       </div>
 
       {/* Tag toggles */}
@@ -573,6 +721,7 @@ export default function MissionsPage() {
             onSave={saveMission}
             onCancel={() => setEditing(null)}
             onToggle={() => toggleActive(m)}
+            onDelete={() => deleteMission(m)}
           />
         ))}
       </div>
@@ -588,7 +737,54 @@ export default function MissionsPage() {
   )
 }
 
-function MissionRow({ mission, categories, editing, onEdit, onSave, onCancel, onToggle }) {
+function CategoryEditor({ category, onSave, onCancel }) {
+  const [name, setName] = useState(category?.name || '')
+  const [desc, setDesc] = useState(category?.description || '')
+
+  if (!category) return null
+
+  return (
+    <div
+      style={{
+        borderTop: '1px solid var(--color-border-light)',
+        paddingTop: '0.75rem',
+        marginTop: '0.5rem',
+      }}
+      className="space-y-2"
+    >
+      <p className="text-xs font-semibold" style={{ color: 'var(--color-text-muted)' }}>
+        Edit: {category.name}
+      </p>
+      <input
+        type="text"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Category name"
+        className="pq-input w-full"
+        autoFocus
+        onKeyDown={(e) => e.key === 'Enter' && onSave(category.id, name, desc)}
+      />
+      <input
+        type="text"
+        value={desc}
+        onChange={(e) => setDesc(e.target.value)}
+        placeholder="Description (optional)"
+        className="pq-input w-full"
+        onKeyDown={(e) => e.key === 'Enter' && onSave(category.id, name, desc)}
+      />
+      <div className="flex gap-2">
+        <button onClick={() => onSave(category.id, name, desc)} className="pq-btn pq-btn-primary">
+          Save
+        </button>
+        <button onClick={onCancel} className="pq-btn pq-btn-ghost">
+          Cancel
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function MissionRow({ mission, categories, editing, onEdit, onSave, onCancel, onToggle, onDelete }) {
   const [text, setText] = useState(mission.text)
   const [categoryId, setCategoryId] = useState(mission.category_id)
   const [tags, setTags] = useState((mission.tags || []).join(', '))
@@ -651,9 +847,11 @@ function MissionRow({ mission, categories, editing, onEdit, onSave, onCancel, on
           {mission.text}
         </p>
         <div className="flex flex-wrap items-center gap-2 mt-1.5">
-          <span className="pq-badge pq-badge-primary">
-            {mission.categories?.name}
-          </span>
+          {mission.categories?.name ? (
+            <span className="pq-badge pq-badge-primary">{mission.categories.name}</span>
+          ) : (
+            <span className="pq-badge pq-badge-muted" style={{ fontStyle: 'italic' }}>No category</span>
+          )}
           {mission.tags?.map((t) => (
             <span key={t} className="pq-badge pq-badge-muted">
               {t}
@@ -661,16 +859,23 @@ function MissionRow({ mission, categories, editing, onEdit, onSave, onCancel, on
           ))}
         </div>
       </div>
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="flex items-center gap-1.5 shrink-0">
         <button onClick={onEdit} className="pq-btn pq-btn-ghost" style={{ fontSize: '0.75rem' }}>
           Edit
         </button>
         <button
           onClick={onToggle}
-          className={mission.active ? 'pq-btn pq-btn-danger' : 'pq-btn pq-btn-primary'}
+          className={mission.active ? 'pq-btn pq-btn-secondary' : 'pq-btn pq-btn-primary'}
           style={{ fontSize: '0.75rem' }}
         >
           {mission.active ? 'Deactivate' : 'Activate'}
+        </button>
+        <button
+          onClick={onDelete}
+          className="pq-btn pq-btn-danger"
+          style={{ fontSize: '0.75rem' }}
+        >
+          Delete
         </button>
       </div>
     </div>
