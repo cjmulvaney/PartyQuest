@@ -101,6 +101,12 @@ export default function Play() {
     setMissions(pm || [])
     setReconnecting(false)
     setLoading(false)
+
+    // Passive redirect: if event has ended, send participant to the feedback survey
+    if (evt?.status === 'ended') {
+      navigate(`/feedback/${accessCode}`, { replace: true })
+      return
+    }
   }, [accessCode])
 
   // On mount: load cache immediately so there's no blank screen on return visits

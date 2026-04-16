@@ -10,13 +10,19 @@ export default function FeedbackPage() {
   const [events, setEvents] = useState([])
   const [search, setSearch] = useState('')
   const [sortDir, setSortDir] = useState('desc')
+  const [surveys, setSurveys] = useState([])
+  const [surveysLoading, setSurveysLoading] = useState(true)
 
   useEffect(() => {
     loadData()
   }, [])
 
   async function loadData() {
-    const [{ data: fb, error: fbErr }, { data: ev, error: evErr }] = await Promise.all([
+    const [
+      { data: fb, error: fbErr },
+      { data: ev, error: evErr },
+      { data: sv, error: svErr },
+    ] = await Promise.all([
       supabase
         .from('feedback')
         .select('id, text, created_at, event_id, participant_id, events(name), participants(name)')
@@ -26,11 +32,17 @@ export default function FeedbackPage() {
         .select('id, name')
         .neq('status', 'draft')
         .order('name'),
+      supabase
+        .from('event_surveys')
+        .select('event_id, rating, increased_enjoyment, met_someone, would_recommend'),
     ])
     if (fbErr) toast.error(`Failed to load feedback: ${fbErr.message}`)
     if (evErr) toast.error(`Failed to load events: ${evErr.message}`)
+    if (svErr) toast.error(`Failed to load survey stats: ${svErr.message}`)
     setFeedback(fb || [])
     setEvents(ev || [])
+    setSurveys(sv || [])
+    setSurveysLoading(false)
     setLoading(false)
   }
 
@@ -44,6 +56,27 @@ export default function FeedbackPage() {
     setFeedback((prev) => prev.filter((f) => f.id !== item.id))
     toast.success('Feedback deleted')
   }
+
+  const filteredSurveys = useMemo(() => {
+    if (filterEvent === 'all') return surveys
+    return surveys.filter((s) => s.event_id === filterEvent)
+  }, [surveys, filterEvent])
+
+  const surveyStats = useMemo(() => {
+    const s = filteredSurveys
+    if (s.length === 0) return null
+    const avgRating = (s.reduce((acc, r) => acc + (r.rating || 0), 0) / s.length).toFixed(1)
+    const enjoyedPct = Math.round(
+      s.filter((r) => r.increased_enjoyment === 'yes' || r.increased_enjoyment === 'somewhat').length / s.length * 100
+    )
+    const metSomeonePct = Math.round(
+      s.filter((r) => r.met_someone === 'yes' || r.met_someone === 'kind_of').length / s.length * 100
+    )
+    const recommendPct = Math.round(
+      s.filter((r) => r.would_recommend === 'yes').length / s.length * 100
+    )
+    return { avgRating, enjoyedPct, metSomeonePct, recommendPct, total: s.length }
+  }, [filteredSurveys])
 
   const filtered = useMemo(() => {
     let result = feedback
@@ -96,6 +129,52 @@ export default function FeedbackPage() {
 
   return (
     <div className="space-y-6">
+      {/* Survey aggregate stats */}
+      {!surveysLoading && (
+        <div className="pq-card">
+          <div className="flex items-center justify-between mb-4">
+            <h3
+              style={{ fontFamily: 'var(--font-heading)', fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)' }}
+            >
+              Post-Event Survey Results
+            </h3>
+            {surveyStats && (
+              <span className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                {surveyStats.total} response{surveyStats.total !== 1 ? 's' : ''}
+                {filterEvent !== 'all' ? ' for this event' : ' all time'}
+              </span>
+            )}
+          </div>
+          {!surveyStats ? (
+            <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+              No survey responses yet{filterEvent !== 'all' ? ' for this event' : ''}.
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {[
+                { label: 'Avg Rating', value: `${surveyStats.avgRating} / 5` },
+                { label: '% Enjoyed More', value: `${surveyStats.enjoyedPct}%` },
+                { label: '% Met Someone', value: `${surveyStats.metSomeonePct}%` },
+                { label: '% Would Recommend', value: `${surveyStats.recommendPct}%` },
+              ].map((stat) => (
+                <div
+                  key={stat.label}
+                  className="p-4"
+                  style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)' }}
+                >
+                  <p style={{ color: 'var(--color-text-muted)', fontSize: '0.8125rem', fontFamily: 'var(--font-body)', marginBottom: '0.25rem' }}>
+                    {stat.label}
+                  </p>
+                  <p style={{ fontFamily: 'var(--font-heading)', fontSize: '1.5rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                    {stat.value}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2

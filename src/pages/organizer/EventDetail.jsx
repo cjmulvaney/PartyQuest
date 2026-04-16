@@ -38,6 +38,7 @@ export default function EventDetail() {
   const [newParticipantName, setNewParticipantName] = useState('')
   const [newParticipantPhone, setNewParticipantPhone] = useState('')
   const [sendingSms, setSendingSms] = useState(false)
+  const [sendingFeedback, setSendingFeedback] = useState(false)
   // Drag and drop — use refs for reliable access in event handlers, state for visuals
   const [dragSource, _setDragSource] = useState(null)
   const [dropTarget, _setDropTarget] = useState(null)
@@ -445,6 +446,25 @@ export default function EventDetail() {
       setError(err.message || 'Failed to send SMS')
     }
     setSendingSms(false)
+  }
+
+  async function handleSendFeedbackSms() {
+    setSendingFeedback(true)
+    setError('')
+    try {
+      const { data, error: fnErr } = await supabase.functions.invoke('send-feedback-sms', {
+        body: { eventId: id },
+      })
+      if (fnErr) throw fnErr
+      if (data?.ok) {
+        await loadData()
+      } else {
+        setError(data?.error || 'Failed to send feedback SMS')
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to send feedback SMS')
+    }
+    setSendingFeedback(false)
   }
 
   function handleSelectForSwap(participantIdx, missionIdx) {
@@ -1232,6 +1252,90 @@ export default function EventDetail() {
                 </p>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Feedback collection banner */}
+        {isEnded && (
+          <div className="pq-card mb-6 animate-fade-in">
+            <h3
+              className="mb-3"
+              style={{
+                fontFamily: 'var(--font-heading)',
+                fontSize: '1.125rem',
+                fontWeight: 700,
+                color: 'var(--color-text)',
+              }}
+            >
+              Collect Feedback
+            </h3>
+
+            {event.feedback_sent_at ? (
+              <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.875rem', fontFamily: 'var(--font-body)' }}>
+                Feedback requests sent on{' '}
+                {new Date(event.feedback_sent_at).toLocaleDateString('en-US', {
+                  month: 'short', day: 'numeric', year: 'numeric',
+                })}
+              </p>
+            ) : (
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.875rem', fontFamily: 'var(--font-body)' }}>
+                  {(() => {
+                    const count = activeParticipants.filter((p) => p.phone).length
+                    return `${count} participant${count !== 1 ? 's' : ''} with phone numbers`
+                  })()}
+                </p>
+                <button
+                  onClick={handleSendFeedbackSms}
+                  disabled={sendingFeedback || activeParticipants.filter((p) => p.phone).length === 0}
+                  className="pq-btn pq-btn-primary"
+                  style={{ fontSize: '0.8125rem' }}
+                >
+                  {sendingFeedback ? 'Sending...' : 'Send Feedback Requests'}
+                </button>
+              </div>
+            )}
+
+            {/* In-room QR code */}
+            <div className="mt-4 pt-4" style={{ borderTop: '1px solid var(--color-border-light)' }}>
+              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.8125rem', fontFamily: 'var(--font-body)', marginBottom: '0.75rem' }}>
+                No phone? Share this link or QR code in the room:
+              </p>
+              <div className="flex items-center gap-4 flex-wrap">
+                <p
+                  style={{
+                    fontFamily: 'monospace',
+                    fontSize: '0.8125rem',
+                    color: 'var(--color-primary)',
+                    background: 'var(--color-surface)',
+                    padding: '0.5rem 0.75rem',
+                    borderRadius: 'var(--radius-md)',
+                    wordBreak: 'break-all',
+                  }}
+                >
+                  {`${window.location.origin}/feedback/${event.event_code}`}
+                </p>
+              </div>
+              <div
+                className="mt-4 p-4 flex flex-col items-center animate-scale-in"
+                style={{
+                  background: 'var(--color-surface)',
+                  borderRadius: 'var(--radius-lg)',
+                  display: 'inline-flex',
+                }}
+              >
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(`${window.location.origin}/feedback/${event.event_code}`)}`}
+                  alt="Feedback QR Code"
+                  width={160}
+                  height={160}
+                  style={{ borderRadius: 'var(--radius-md)' }}
+                />
+                <p className="mt-2" style={{ color: 'var(--color-text-muted)', fontSize: '0.8125rem', fontFamily: 'var(--font-body)' }}>
+                  Scan to give feedback
+                </p>
+              </div>
+            </div>
           </div>
         )}
 

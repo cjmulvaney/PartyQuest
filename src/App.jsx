@@ -16,6 +16,8 @@ import MissionsPage from './pages/admin/MissionsPage.jsx'
 import EventsPage from './pages/admin/EventsPage.jsx'
 import FeedbackPage from './pages/admin/FeedbackPage.jsx'
 import OrganizersPage from './pages/admin/OrganizersPage.jsx'
+import MetricsPage from './pages/admin/MetricsPage.jsx'
+import Feedback from './pages/Feedback.jsx'
 
 export default function App() {
   return (
@@ -28,6 +30,7 @@ export default function App() {
           <Route path="/register/:eventCode" element={<Register />} />
           <Route path="/spectator" element={<Spectator />} />
           <Route path="/auth/callback" element={<AuthCallback />} />
+          <Route path="/feedback/:token" element={<Feedback />} />
           <Route path="/organizer" element={<Dashboard />} />
           <Route path="/organizer/new" element={<CreateEvent />} />
           <Route path="/organizer/event/:id" element={<EventDetail />} />
@@ -37,6 +40,7 @@ export default function App() {
             <Route path="events" element={<EventsPage />} />
             <Route path="feedback" element={<FeedbackPage />} />
             <Route path="organizers" element={<OrganizersPage />} />
+            <Route path="metrics" element={<MetricsPage />} />
           </Route>
         </Routes>
         <Analytics />
@@ -54,7 +58,7 @@ export default function App() {
             letterSpacing: '0.03em',
           }}
         >
-          v2.6
+          v2.10
         </span>
       </div>
     </ThemeProvider>
