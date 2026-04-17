@@ -479,9 +479,15 @@ export default function Register() {
                 placeholder="(555) 123-4567"
                 className="pq-input w-full"
               />
-              <p className="mt-1" style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontFamily: 'var(--font-body)' }}>
-                Get your access code by text
-              </p>
+              {phone.trim() ? (
+                <p className="mt-2" style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontFamily: 'var(--font-body)', lineHeight: 1.5 }}>
+                  By entering your number, you agree to receive text messages from Party Quest about this event — your access code, mission updates, and a post-event feedback request. Msg frequency varies. Msg & data rates may apply. Reply STOP to opt out, HELP for help.
+                </p>
+              ) : (
+                <p className="mt-1" style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontFamily: 'var(--font-body)' }}>
+                  Get your access code by text
+                </p>
+              )}
             </div>
 
             {error && (
