@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
-import { selectMissionsLeveledRoundRobin } from '../lib/missions.js'
+import { selectMissionsForParticipant } from '../lib/missions.js'
 import { normalizePhone } from '../lib/phone.js'
 
 export default function Register() {
@@ -167,7 +167,7 @@ export default function Register() {
     if (config.tag_filters?.length > 0) {
       const { data } = await supabase
         .from('missions')
-        .select('id')
+        .select('id, category_id')
         .eq('active', true)
         .in('category_id', config.tag_filters)
       missions = data
@@ -177,7 +177,7 @@ export default function Register() {
     if (!missions || missions.length === 0) {
       const { data } = await supabase
         .from('missions')
-        .select('id')
+        .select('id, category_id')
         .eq('active', true)
       missions = data
     }
@@ -212,8 +212,16 @@ export default function Register() {
       }
     }
 
-    // Leveled round-robin: least-assigned missions first, shuffled within same count
-    const selected = selectMissionsLeveledRoundRobin(missions, config.mission_count, assignmentCounts)
+    // Late joiner: best-effort balance against whatever's left in the pool.
+    const mode = config.allocation_mode || 'balanced'
+    const selected = selectMissionsForParticipant(
+      mode,
+      missions,
+      config.mission_count,
+      assignmentCounts,
+      {},
+      new Set()
+    )
 
     const rows = selected.map((m) => ({
       participant_id: participant.id,

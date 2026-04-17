@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase.js'
 import { useAuth } from '../../hooks/useAuth.js'
-import { generateCode, selectMissionsLeveledRoundRobin, insertParticipantWithRetry } from '../../lib/missions.js'
+import { generateCode, selectMissionsForParticipant, insertParticipantWithRetry } from '../../lib/missions.js'
 import { normalizePhone } from '../../lib/phone.js'
 
 const EVENT_TYPE_DB_MAP = {
@@ -33,8 +33,6 @@ export default function CreateEvent() {
   const [isEditMode, setIsEditMode] = useState(false)
   const [editEventId, setEditEventId] = useState(editId || null)
   const [editEventStatus, setEditEventStatus] = useState(null)
-  const textareaRef = useRef(null)
-
   // Step 1 — Event Basics
   const [eventName, setEventName] = useState('')
   const [eventType, setEventType] = useState('House Party')
@@ -43,7 +41,12 @@ export default function CreateEvent() {
 
   // Step 2 — Game Setup (Participants + Missions)
   const [maxParticipants, setMaxParticipants] = useState(25)
-  const [participantNames, setParticipantNames] = useState('')
+  // Structured rows: [{ name, phone }] — empty rows are filtered out at submit time.
+  const [participantRows, setParticipantRows] = useState([
+    { name: '', phone: '' },
+    { name: '', phone: '' },
+    { name: '', phone: '' },
+  ])
   const [anonymityEnabled, setAnonymityEnabled] = useState(false)
   const [feedMode, setFeedMode] = useState('secret')
   const [feedPhotosEnabled, setFeedPhotosEnabled] = useState(true)
@@ -54,6 +57,7 @@ export default function CreateEvent() {
   const [showAdvancedFeed, setShowAdvancedFeed] = useState(false)
 
   const [missionCount, setMissionCount] = useState(3)
+  const [allocationMode, setAllocationMode] = useState('balanced')
   const [unlockType, setUnlockType] = useState('all_at_once')
   const [unlockTimes, setUnlockTimes] = useState(['', ''])
   const [categories, setCategories] = useState([])
@@ -86,14 +90,15 @@ export default function CreateEvent() {
     function handleBeforeUnload(e) {
       // Only warn if user has entered meaningful data and hasn't launched yet
       if (launched) return
-      const hasData = eventName.trim() || participantNames.trim() || (step > 1)
+      const hasParticipantData = participantRows.some((r) => r.name.trim() || r.phone.trim())
+      const hasData = eventName.trim() || hasParticipantData || (step > 1)
       if (!hasData) return
       e.preventDefault()
       e.returnValue = ''
     }
     window.addEventListener('beforeunload', handleBeforeUnload)
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
-  }, [eventName, participantNames, step, launched])
+  }, [eventName, participantRows, step, launched])
 
   // Set default times (today evening)
   useEffect(() => {
@@ -149,16 +154,17 @@ export default function CreateEvent() {
         setMissionCount(config.mission_count || 3)
         setUnlockType(config.unlock_type || 'all_at_once')
         if (config.tag_filters) setSelectedTags(config.tag_filters)
+        if (config.allocation_mode) setAllocationMode(config.allocation_mode)
       }
-      // Load existing participant names
+      // Load existing participants (name + phone)
       const { data: parts } = await supabase
         .from('participants')
-        .select('name')
+        .select('name, phone')
         .eq('event_id', editId)
         .eq('is_active', true)
         .order('name')
       if (parts && parts.length > 0) {
-        setParticipantNames(parts.map(p => p.name).join('\n'))
+        setParticipantRows(parts.map((p) => ({ name: p.name || '', phone: p.phone || '' })))
       }
       if (data.max_participants) {
         setMaxParticipants(data.max_participants)
@@ -169,14 +175,6 @@ export default function CreateEvent() {
     }
     loadEvent()
   }, [editId, user])
-
-  // Auto-resize textarea
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto'
-      textareaRef.current.style.height = Math.max(textareaRef.current.scrollHeight, 120) + 'px'
-    }
-  }, [participantNames, step])
 
   // Load categories and their mission counts
   useEffect(() => {
@@ -343,22 +341,16 @@ export default function CreateEvent() {
       setEventCode(code)
     }
 
-    // Parse names — each line can be "Name" or "Name, phone"
-    const lines = participantNames
-      .split(/\n/)
-      .map((l) => l.trim())
-      .filter(Boolean)
-
-    const participants = lines.map((line) => {
-      const commaIdx = line.indexOf(',')
-      if (commaIdx !== -1) {
-        const name = line.slice(0, commaIdx).trim()
-        const rawPhone = line.slice(commaIdx + 1).trim()
-        const phone = normalizePhone(rawPhone)
-        return { name, phone, accessCode: generateCode(6), isNamed: true }
-      }
-      return { name: line, phone: null, accessCode: generateCode(6), isNamed: true }
-    })
+    // Filter out blank rows; normalize phone to E.164 (or null if empty/invalid).
+    const participants = participantRows
+      .map((r) => ({ name: r.name.trim(), rawPhone: r.phone.trim() }))
+      .filter((r) => r.name.length > 0)
+      .map((r) => ({
+        name: r.name,
+        phone: r.rawPhone ? normalizePhone(r.rawPhone) : null,
+        accessCode: generateCode(6),
+        isNamed: true,
+      }))
     setGeneratedParticipants(participants)
   }
 
@@ -442,6 +434,7 @@ export default function CreateEvent() {
             unlock_type: unlockType,
             unlock_schedule: schedule,
             tag_filters: selectedTags,
+            allocation_mode: allocationMode,
           })
           .eq('event_id', editEventId)
 
@@ -473,6 +466,7 @@ export default function CreateEvent() {
             unlock_type: unlockType,
             unlock_schedule: schedule,
             tag_filters: selectedTags,
+            allocation_mode: allocationMode,
           })
 
         if (configError) throw configError
@@ -505,13 +499,14 @@ export default function CreateEvent() {
   }
 
   async function assignMissionsToAll(participants, eventId) {
-    // Get eligible missions — try with tag filter first, fallback to all
+    // Get eligible missions — try with tag filter first, fallback to all.
+    // Pull category_id so the balanced selector can avoid per-participant repeats.
     let missions = null
 
     if (selectedTags.length > 0) {
       const { data } = await supabase
         .from('missions')
-        .select('id')
+        .select('id, category_id')
         .eq('active', true)
         .in('category_id', selectedTags)
       missions = data
@@ -520,29 +515,34 @@ export default function CreateEvent() {
     if (!missions || missions.length === 0) {
       const { data } = await supabase
         .from('missions')
-        .select('id')
+        .select('id, category_id')
         .eq('active', true)
       missions = data
     }
 
     if (!missions || missions.length === 0) return
 
+    const missionCategoryById = {}
+    missions.forEach((m) => { missionCategoryById[m.id] = m.category_id })
+
     // Get existing assignment counts for this event (in case some participants
-    // self-registered early and already have missions, or for future shared missions)
+    // self-registered early and already have missions).
     const participantIds = participants.map((p) => p.id)
     const { data: existingAssignments } = await supabase
       .from('participant_missions')
-      .select('mission_id')
+      .select('participant_id, mission_id')
       .in('participant_id', participantIds)
 
-    // Build assignment count map across ALL event participants
+    // Global mission-usage counts across the event
     const assignmentCounts = {}
     missions.forEach((m) => (assignmentCounts[m.id] = 0))
+    // Per-participant assignment lookup
+    const existingByParticipant = {}
     if (existingAssignments) {
       existingAssignments.forEach((a) => {
-        if (assignmentCounts[a.mission_id] !== undefined) {
-          assignmentCounts[a.mission_id]++
-        }
+        if (assignmentCounts[a.mission_id] !== undefined) assignmentCounts[a.mission_id]++
+        if (!existingByParticipant[a.participant_id]) existingByParticipant[a.participant_id] = []
+        existingByParticipant[a.participant_id].push(a.mission_id)
       })
     }
 
@@ -557,21 +557,26 @@ export default function CreateEvent() {
     const allRows = []
 
     for (const participant of participants) {
-      // Check if this participant already has missions (self-registered early)
-      const { data: existingMissions } = await supabase
-        .from('participant_missions')
-        .select('mission_id')
-        .eq('participant_id', participant.id)
-
-      const alreadyAssigned = new Set(
-        (existingMissions || []).map((m) => m.mission_id)
-      )
+      const alreadyIds = existingByParticipant[participant.id] || []
+      const alreadyAssigned = new Set(alreadyIds)
       const needed = missionCount - alreadyAssigned.size
       if (needed <= 0) continue
 
-      // Leveled round-robin: sort by least-assigned, shuffle within same count
-      const eligible = missions.filter((m) => !alreadyAssigned.has(m.id))
-      const selected = selectMissionsLeveledRoundRobin(eligible, needed, assignmentCounts)
+      // Per-participant category counts seeded from any pre-existing assignments
+      const participantCategoryCounts = {}
+      alreadyIds.forEach((mid) => {
+        const cat = missionCategoryById[mid]
+        if (cat) participantCategoryCounts[cat] = (participantCategoryCounts[cat] || 0) + 1
+      })
+
+      const selected = selectMissionsForParticipant(
+        allocationMode,
+        missions,
+        needed,
+        assignmentCounts,
+        participantCategoryCounts,
+        alreadyAssigned
+      )
 
       selected.forEach((m, i) => {
         assignmentCounts[m.id] = (assignmentCounts[m.id] || 0) + 1
@@ -938,19 +943,120 @@ export default function CreateEvent() {
                       className="block mb-1.5"
                       style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}
                     >
-                      Participant names (optional)
+                      Participants (optional)
                     </label>
-                    <textarea
-                      ref={textareaRef}
-                      value={participantNames}
-                      onChange={(e) => setParticipantNames(e.target.value)}
-                      placeholder={"David, +15551234567\nTina\nChris, (555) 867-5309\nJerry"}
-                      rows={4}
-                      style={{ minHeight: '120px', maxHeight: '400px', overflow: 'auto', resize: 'none' }}
-                      className="pq-input w-full"
-                    />
-                    <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.375rem' }}>
-                      One per line. Add a comma and phone number to SMS participants when the event starts.<br />Example: David, +15551234567
+
+                    {/* Header row */}
+                    <div
+                      className="grid items-center gap-2 mb-1.5"
+                      style={{
+                        gridTemplateColumns: '24px 1fr 180px 28px',
+                        fontFamily: 'var(--font-body)',
+                        fontSize: '0.7rem',
+                        fontWeight: 600,
+                        color: 'var(--color-text-muted)',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
+                      }}
+                    >
+                      <div />
+                      <div>Name</div>
+                      <div>Phone (optional)</div>
+                      <div />
+                    </div>
+
+                    {/* Rows */}
+                    <div className="flex flex-col gap-1.5">
+                      {participantRows.map((row, idx) => (
+                        <div
+                          key={idx}
+                          className="grid items-center gap-2"
+                          style={{ gridTemplateColumns: '24px 1fr 180px 28px' }}
+                        >
+                          <div
+                            style={{
+                              fontFamily: 'var(--font-body)',
+                              fontSize: '0.8125rem',
+                              color: 'var(--color-text-muted)',
+                              textAlign: 'right',
+                              fontVariantNumeric: 'tabular-nums',
+                            }}
+                          >
+                            {idx + 1}.
+                          </div>
+                          <input
+                            type="text"
+                            value={row.name}
+                            onChange={(e) => {
+                              const next = [...participantRows]
+                              next[idx] = { ...next[idx], name: e.target.value }
+                              setParticipantRows(next)
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault()
+                                if (idx === participantRows.length - 1) {
+                                  setParticipantRows([...participantRows, { name: '', phone: '' }])
+                                }
+                              }
+                            }}
+                            placeholder="e.g. David"
+                            className="pq-input w-full"
+                          />
+                          <input
+                            type="tel"
+                            value={row.phone}
+                            onChange={(e) => {
+                              const next = [...participantRows]
+                              next[idx] = { ...next[idx], phone: e.target.value }
+                              setParticipantRows(next)
+                            }}
+                            placeholder="+15551234567"
+                            className="pq-input w-full"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (participantRows.length === 1) {
+                                setParticipantRows([{ name: '', phone: '' }])
+                              } else {
+                                setParticipantRows(participantRows.filter((_, i) => i !== idx))
+                              }
+                            }}
+                            className="pq-btn pq-btn-ghost"
+                            style={{
+                              color: 'var(--color-text-muted)',
+                              padding: '0.125rem 0.375rem',
+                              fontSize: '1rem',
+                              lineHeight: 1,
+                            }}
+                            title="Remove row"
+                            onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--color-danger)')}
+                            onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--color-text-muted)')}
+                          >
+                            &times;
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setParticipantRows([...participantRows, { name: '', phone: '' }])}
+                      className="pq-btn pq-btn-ghost mt-2"
+                      style={{
+                        fontFamily: 'var(--font-body)',
+                        fontSize: '0.8125rem',
+                        fontWeight: 600,
+                        color: 'var(--color-primary)',
+                        padding: '0.25rem 0',
+                      }}
+                    >
+                      + Add another participant
+                    </button>
+
+                    <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.5rem' }}>
+                      Phone is optional — add it to text invites/access codes when the event starts. You can edit names and phones any time before the event begins.
                     </p>
                   </div>
                 </div>
@@ -1035,6 +1141,42 @@ export default function CreateEvent() {
                       </span>
                     ))}
                   </div>
+                </div>
+
+                {/* Allocation mode */}
+                <div>
+                  <label
+                    className="block mb-1.5"
+                    style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}
+                  >
+                    Mission Distribution
+                  </label>
+                  <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: '0.75rem', lineHeight: 1.5 }}>
+                    Balanced spreads each guest's missions across categories so they don't get duplicates from one bucket. Random just shuffles and deals.
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setAllocationMode('balanced')}
+                      disabled={isEditMode && editEventStatus === 'active'}
+                      className={allocationMode === 'balanced' ? 'pq-btn pq-btn-primary' : 'pq-btn pq-btn-secondary'}
+                      style={{ fontFamily: 'var(--font-body)', padding: '0.75rem 1rem' }}
+                    >
+                      Balanced
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAllocationMode('random')}
+                      disabled={isEditMode && editEventStatus === 'active'}
+                      className={allocationMode === 'random' ? 'pq-btn pq-btn-primary' : 'pq-btn pq-btn-secondary'}
+                      style={{ fontFamily: 'var(--font-body)', padding: '0.75rem 1rem' }}
+                    >
+                      Random
+                    </button>
+                  </div>
+                  <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '0.5rem', lineHeight: 1.4 }}>
+                    Late joiners (link/QR after start) get a best-effort fill from whatever's left in the pool.
+                  </p>
                 </div>
 
                 {/* Unlock type */}

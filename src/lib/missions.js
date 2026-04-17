@@ -36,6 +36,84 @@ export function selectMissionsLeveledRoundRobin(missions, count, assignmentCount
 }
 
 /**
+ * Balanced selector — picks one mission at a time, preferring a category
+ * the participant doesn't have yet, then breaking ties by least-assigned
+ * across the event, then randomly. Falls back gracefully when the
+ * remaining pool can't avoid a category repeat.
+ *
+ * @param {Array} missions - [{ id, category_id }]
+ * @param {number} count - Number of missions to pick
+ * @param {Object} assignmentCounts - Map mission_id -> count across event
+ * @param {Object} participantCategoryCounts - Map category_id -> count already on this participant
+ * @param {Set} excludeIds - Mission IDs already assigned to this participant
+ * @returns {Array} Selected mission objects (subset of input)
+ */
+export function selectMissionsBalanced(
+  missions,
+  count,
+  assignmentCounts = {},
+  participantCategoryCounts = {},
+  excludeIds = new Set()
+) {
+  const selected = []
+  const picked = new Set(excludeIds)
+  const localCatCounts = { ...participantCategoryCounts }
+
+  for (let i = 0; i < count; i++) {
+    const candidates = missions.filter((m) => !picked.has(m.id))
+    if (candidates.length === 0) break
+
+    candidates.sort((a, b) => {
+      const aCat = localCatCounts[a.category_id] || 0
+      const bCat = localCatCounts[b.category_id] || 0
+      if (aCat !== bCat) return aCat - bCat
+      const aAssign = assignmentCounts[a.id] || 0
+      const bAssign = assignmentCounts[b.id] || 0
+      if (aAssign !== bAssign) return aAssign - bAssign
+      return Math.random() - 0.5
+    })
+
+    const pick = candidates[0]
+    selected.push(pick)
+    picked.add(pick.id)
+    if (pick.category_id) {
+      localCatCounts[pick.category_id] = (localCatCounts[pick.category_id] || 0) + 1
+    }
+  }
+  return selected
+}
+
+/**
+ * Pick missions using the configured allocation mode.
+ *
+ * @param {'balanced'|'random'} mode
+ * @param {Array} missions - [{ id, category_id }] (category_id only required for 'balanced')
+ * @param {number} count
+ * @param {Object} assignmentCounts
+ * @param {Object} participantCategoryCounts
+ * @param {Set} excludeIds
+ */
+export function selectMissionsForParticipant(
+  mode,
+  missions,
+  count,
+  assignmentCounts = {},
+  participantCategoryCounts = {},
+  excludeIds = new Set()
+) {
+  if (mode === 'random') {
+    return selectMissionsLeveledRoundRobin(missions, count, assignmentCounts, excludeIds)
+  }
+  return selectMissionsBalanced(
+    missions,
+    count,
+    assignmentCounts,
+    participantCategoryCounts,
+    excludeIds
+  )
+}
+
+/**
  * Insert a participant with retry on access code collision (unique_violation 23505).
  *
  * @param {Object} supabase - Supabase client

@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase.js'
 import { useAuth } from '../../hooks/useAuth.js'
 import { getAvatarColor, getInitials } from '../../lib/avatar.js'
-import { insertParticipantWithRetry, selectMissionsLeveledRoundRobin } from '../../lib/missions.js'
+import { insertParticipantWithRetry, selectMissionsForParticipant } from '../../lib/missions.js'
 import { normalizePhone } from '../../lib/phone.js'
 import Leaderboard from '../../components/Leaderboard.jsx'
 import ActivityFeed from '../../components/ActivityFeed.jsx'
@@ -37,6 +37,11 @@ export default function EventDetail() {
   const [addingParticipant, setAddingParticipant] = useState(false)
   const [newParticipantName, setNewParticipantName] = useState('')
   const [newParticipantPhone, setNewParticipantPhone] = useState('')
+  // Inline edit (only allowed before the event has started)
+  const [editingParticipantId, setEditingParticipantId] = useState(null)
+  const [editName, setEditName] = useState('')
+  const [editPhone, setEditPhone] = useState('')
+  const [savingEdit, setSavingEdit] = useState(false)
   const [sendingSms, setSendingSms] = useState(false)
   const [sendingFeedback, setSendingFeedback] = useState(false)
   // Drag and drop — use refs for reliable access in event handlers, state for visuals
@@ -425,6 +430,42 @@ export default function EventDetail() {
       .eq('id', participantId)
 
     await loadData()
+  }
+
+  function startEditParticipant(p) {
+    setEditingParticipantId(p.id)
+    setEditName(p.name || '')
+    setEditPhone(p.phone || '')
+    setError('')
+  }
+
+  function cancelEditParticipant() {
+    setEditingParticipantId(null)
+    setEditName('')
+    setEditPhone('')
+  }
+
+  async function saveEditParticipant(participantId) {
+    const trimmedName = editName.trim()
+    if (!trimmedName) {
+      setError('Name is required.')
+      return
+    }
+    setSavingEdit(true)
+    setError('')
+    try {
+      const phoneE164 = editPhone.trim() ? normalizePhone(editPhone) : null
+      const { error: updateErr } = await supabase
+        .from('participants')
+        .update({ name: trimmedName, phone: phoneE164 })
+        .eq('id', participantId)
+      if (updateErr) throw updateErr
+      cancelEditParticipant()
+      await loadData()
+    } catch (err) {
+      setError(err.message || 'Failed to update participant.')
+    }
+    setSavingEdit(false)
   }
 
   async function handleSendSmsBlast() {
@@ -876,7 +917,7 @@ export default function EventDetail() {
   async function assignMissionsToParticipant(participant, eventConfig) {
     let query = supabase
       .from('missions')
-      .select('id')
+      .select('id, category_id')
       .eq('active', true)
 
     if (eventConfig.tag_filters?.length > 0) {
@@ -886,7 +927,7 @@ export default function EventDetail() {
     const { data: missions } = await query
     if (!missions || missions.length === 0) return
 
-    // Get existing assignment counts for leveled round-robin
+    // Get existing assignment counts across the event for global balance
     const { data: allEventParticipants } = await supabase
       .from('participants')
       .select('id')
@@ -912,7 +953,15 @@ export default function EventDetail() {
       }
     }
 
-    const selected = selectMissionsLeveledRoundRobin(missions, eventConfig.mission_count, assignmentCounts)
+    const mode = eventConfig.allocation_mode || 'balanced'
+    const selected = selectMissionsForParticipant(
+      mode,
+      missions,
+      eventConfig.mission_count,
+      assignmentCounts,
+      {}, // late joiner has no prior missions on this participant
+      new Set()
+    )
 
     const rows = selected.map((m) => ({
       participant_id: participant.id,
@@ -1463,7 +1512,9 @@ export default function EventDetail() {
                   <div className="col-span-1" />
                 </div>
 
-                {activeParticipants.map((p) => (
+                {activeParticipants.map((p, idx) => {
+                  const isEditing = editingParticipantId === p.id
+                  return (
                   <div
                     key={p.id}
                     className="grid grid-cols-12 px-5 py-3 items-center"
@@ -1481,17 +1532,35 @@ export default function EventDetail() {
                       >
                         {getInitials(p.name)}
                       </div>
-                      <span
-                        className="truncate"
-                        style={{
-                          color: 'var(--color-text)',
-                          fontSize: '0.875rem',
-                          fontWeight: 500,
-                          fontFamily: 'var(--font-body)',
-                        }}
-                      >
-                        {p.name}
-                      </span>
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          className="pq-input"
+                          style={{ fontSize: '0.875rem', padding: '0.25rem 0.5rem' }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') saveEditParticipant(p.id)
+                            if (e.key === 'Escape') cancelEditParticipant()
+                          }}
+                          autoFocus
+                        />
+                      ) : (
+                        <span
+                          className="truncate flex items-center gap-1"
+                          style={{
+                            color: 'var(--color-text)',
+                            fontSize: '0.875rem',
+                            fontWeight: 500,
+                            fontFamily: 'var(--font-body)',
+                          }}
+                        >
+                          <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', minWidth: 18 }}>
+                            {idx + 1}.
+                          </span>
+                          {p.name}
+                        </span>
+                      )}
                     </div>
                     <div className="col-span-2">
                       <span
@@ -1506,13 +1575,30 @@ export default function EventDetail() {
                       </span>
                     </div>
                     <div className="col-span-2 flex items-center gap-1">
-                      <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', fontFamily: 'var(--font-body)' }}>
-                        {p.phone ? `***-${p.phone.slice(-4)}` : '\u2014'}
-                      </span>
-                      {p.sms_sent_at && (
-                        <span className="pq-badge pq-badge-success" style={{ fontSize: '0.625rem', padding: '0.125rem 0.375rem' }}>
-                          SMS
-                        </span>
+                      {isEditing ? (
+                        <input
+                          type="tel"
+                          value={editPhone}
+                          onChange={(e) => setEditPhone(e.target.value)}
+                          className="pq-input"
+                          style={{ fontSize: '0.8125rem', padding: '0.25rem 0.5rem', width: '100%' }}
+                          placeholder="Phone (optional)"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') saveEditParticipant(p.id)
+                            if (e.key === 'Escape') cancelEditParticipant()
+                          }}
+                        />
+                      ) : (
+                        <>
+                          <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', fontFamily: 'var(--font-body)' }}>
+                            {p.phone ? `***-${p.phone.slice(-4)}` : '\u2014'}
+                          </span>
+                          {p.sms_sent_at && (
+                            <span className="pq-badge pq-badge-success" style={{ fontSize: '0.625rem', padding: '0.125rem 0.375rem' }}>
+                              SMS
+                            </span>
+                          )}
+                        </>
                       )}
                     </div>
                     <div className="col-span-1 text-center">
@@ -1530,27 +1616,70 @@ export default function EventDetail() {
                     <div className="col-span-2 text-right" style={{ color: 'var(--color-text-secondary)', fontSize: '0.875rem', fontFamily: 'var(--font-body)' }}>
                       {p.completed} / {p.total}
                     </div>
-                    <div className="col-span-1 text-right">
-                      {!isEnded && (
-                        <button
-                          onClick={() => handleDeactivateParticipant(p.id)}
-                          className="pq-btn pq-btn-ghost"
-                          style={{
-                            color: 'var(--color-text-muted)',
-                            padding: '0.125rem 0.375rem',
-                            fontSize: '1rem',
-                            lineHeight: 1,
-                          }}
-                          title="Remove participant"
-                          onMouseEnter={(e) => e.currentTarget.style.color = 'var(--color-danger)'}
-                          onMouseLeave={(e) => e.currentTarget.style.color = 'var(--color-text-muted)'}
-                        >
-                          &times;
-                        </button>
+                    <div className="col-span-1 text-right flex items-center justify-end gap-1">
+                      {isEditing ? (
+                        <>
+                          <button
+                            onClick={() => saveEditParticipant(p.id)}
+                            disabled={savingEdit}
+                            className="pq-btn pq-btn-ghost"
+                            style={{ color: 'var(--color-success)', padding: '0.125rem 0.375rem', fontSize: '0.8125rem', fontWeight: 600 }}
+                            title="Save"
+                          >
+                            {savingEdit ? '...' : 'Save'}
+                          </button>
+                          <button
+                            onClick={cancelEditParticipant}
+                            disabled={savingEdit}
+                            className="pq-btn pq-btn-ghost"
+                            style={{ color: 'var(--color-text-muted)', padding: '0.125rem 0.375rem', fontSize: '0.8125rem' }}
+                            title="Cancel"
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          {isUpcoming && (
+                            <button
+                              onClick={() => startEditParticipant(p)}
+                              className="pq-btn pq-btn-ghost"
+                              style={{
+                                color: 'var(--color-text-muted)',
+                                padding: '0.125rem 0.375rem',
+                                fontSize: '0.875rem',
+                                lineHeight: 1,
+                              }}
+                              title="Edit name & phone"
+                              onMouseEnter={(e) => e.currentTarget.style.color = 'var(--color-primary)'}
+                              onMouseLeave={(e) => e.currentTarget.style.color = 'var(--color-text-muted)'}
+                            >
+                              ✎
+                            </button>
+                          )}
+                          {!isEnded && (
+                            <button
+                              onClick={() => handleDeactivateParticipant(p.id)}
+                              className="pq-btn pq-btn-ghost"
+                              style={{
+                                color: 'var(--color-text-muted)',
+                                padding: '0.125rem 0.375rem',
+                                fontSize: '1rem',
+                                lineHeight: 1,
+                              }}
+                              title="Remove participant"
+                              onMouseEnter={(e) => e.currentTarget.style.color = 'var(--color-danger)'}
+                              onMouseLeave={(e) => e.currentTarget.style.color = 'var(--color-text-muted)'}
+                            >
+                              &times;
+                            </button>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             )}
 
