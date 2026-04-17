@@ -1,12 +1,13 @@
 -- Party Quest — Canonical Database Schema
--- Snapshot taken 2026-04-16 AFTER v3.1-cleanup.
+-- Snapshot taken 2026-04-17 AFTER v3.4-missions-v2.
 -- Reflects the live state of the Supabase project (ynffsjqnwhvyzrerbxor).
 --
 -- This file IS the current source of truth. Running it against an empty
 -- database will produce the same shape as production.
 --
 -- History of incremental migrations is preserved in ./archive/
--- (phases 3/5, v2.1, v2.3, v2.4, v2.6, v2.7, v2.8, v2.9, v2.10, v3.0, v3.1).
+-- (phases 3/5, v2.1, v2.3, v2.4, v2.6, v2.7, v2.8, v2.9, v2.10,
+--  v3.0, v3.1, v3.2, v3.3, v3.4).
 --
 -- After a new migration is applied in prod, fold its DDL into this file
 -- and move the migration SQL into ./archive/.
@@ -77,7 +78,8 @@ create table event_config (
   mission_count    integer default 3 check (mission_count between 1 and 5),
   unlock_type      text default 'all_at_once' check (unlock_type in ('all_at_once','timed')),
   unlock_schedule  jsonb default '[]',
-  tag_filters      text[] default '{}'
+  tag_filters      text[] default '{}',
+  allocation_mode  text default 'balanced' check (allocation_mode in ('balanced','random'))  -- v3.3
 );
 
 -- Participants
@@ -233,6 +235,23 @@ as $$
 $$;
 
 grant execute on function public.is_admin() to authenticated;
+
+-- v3.2: helper used by tightened feed-interaction INSERT policies
+create or replace function public.is_active_participant(p_participant_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from participants p
+    join events e on e.id = p.event_id
+    where p.id = p_participant_id
+      and e.status = 'active'
+  );
+$$;
 
 -- v2.1 (fixed in v2.9): self-registration with optional phone
 create or replace function public.rpc_register_participant(
@@ -427,6 +446,42 @@ end;
 $$;
 
 grant execute on function public.rpc_complete_mission(text, uuid, text, text) to anon, authenticated;
+
+-- v3.2: access-code-gated reaction removal (replaces permissive DELETE policy)
+create or replace function public.rpc_remove_reaction(
+  p_participant_id uuid,
+  p_reaction_id    uuid,
+  p_access_code    text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_ok boolean;
+begin
+  select exists (
+    select 1
+    from participants p
+    join completion_reactions r on r.participant_id = p.id
+    where p.id = p_participant_id
+      and p.access_code = p_access_code
+      and r.id = p_reaction_id
+  ) into v_ok;
+
+  if not v_ok then
+    raise exception 'Not authorized to remove this reaction'
+      using errcode = '42501';
+  end if;
+
+  delete from completion_reactions
+  where id = p_reaction_id
+    and participant_id = p_participant_id;
+end;
+$$;
+
+grant execute on function public.rpc_remove_reaction(uuid, uuid, text) to anon, authenticated;
 
 -- v2.9: organizer assigns missions to a participant (bypasses RLS)
 create or replace function public.rpc_assign_participant_missions(
@@ -663,8 +718,10 @@ create policy "Organizers can update participant missions"
 create policy "Feedback is readable"
   on feedback for select using (true);
 
-create policy "Anyone can submit feedback"
-  on feedback for insert with check (true);
+-- v3.2: require an active-event participant
+create policy "feedback_insert_active_participant"
+  on feedback for insert to anon, authenticated
+  with check (public.is_active_participant(participant_id));
 
 create policy "Admins can delete feedback"
   on feedback for delete using (is_admin());
@@ -673,18 +730,20 @@ create policy "Admins can delete feedback"
 create policy "Completion reactions are publicly readable"
   on completion_reactions for select using (true);
 
-create policy "Anyone can add reactions"
-  on completion_reactions for insert with check (true);
-
-create policy "Anyone can remove their reactions"
-  on completion_reactions for delete using (true);
+-- v3.2: tightened — only active-event participants can insert;
+-- DELETE intentionally has no policy (handled by rpc_remove_reaction)
+create policy "completion_reactions_insert_active_participant"
+  on completion_reactions for insert to anon, authenticated
+  with check (public.is_active_participant(participant_id));
 
 -- ─── completion_comments ───────────────────────────────────────
 create policy "Completion comments are publicly readable"
   on completion_comments for select using (true);
 
-create policy "Anyone can add completion comments"
-  on completion_comments for insert with check (true);
+-- v3.2: require an active-event participant
+create policy "completion_comments_insert_active_participant"
+  on completion_comments for insert to anon, authenticated
+  with check (public.is_active_participant(participant_id));
 
 -- ─── event_surveys ─────────────────────────────────────────────
 create policy "Anyone can submit a survey"
