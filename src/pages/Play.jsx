@@ -368,6 +368,7 @@ export default function Play() {
               showReactions={event.feed_reactions_enabled !== false}
               showInteractiveComments={event.feed_interactive_comments_enabled === true}
               participantId={participant?.id}
+              accessCode={accessCode}
             />
           </div>
         )}

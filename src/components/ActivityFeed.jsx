@@ -443,6 +443,7 @@ export default function ActivityFeed({
   showReactions = true,
   showInteractiveComments = false,
   participantId = null,
+  accessCode = null,
 }) {
   const [entries, setEntries] = useState([])
   const [loading, setLoading] = useState(true)
@@ -570,6 +571,12 @@ export default function ActivityFeed({
     async (participantMissionId, emoji, alreadyReacted) => {
       if (!participantId) return
       if (alreadyReacted) {
+        const existing = reactions.find(
+          (r) =>
+            r.participant_mission_id === participantMissionId &&
+            r.participant_id === participantId &&
+            r.emoji === emoji
+        )
         // Optimistic remove
         setReactions((prev) =>
           prev.filter(
@@ -577,12 +584,13 @@ export default function ActivityFeed({
               !(r.participant_mission_id === participantMissionId && r.participant_id === participantId && r.emoji === emoji)
           )
         )
-        await supabase
-          .from('completion_reactions')
-          .delete()
-          .eq('participant_mission_id', participantMissionId)
-          .eq('participant_id', participantId)
-          .eq('emoji', emoji)
+        if (existing?.id && accessCode) {
+          await supabase.rpc('rpc_remove_reaction', {
+            p_participant_id: participantId,
+            p_reaction_id: existing.id,
+            p_access_code: accessCode,
+          })
+        }
       } else {
         // Optimistic add with temp id
         const tempReaction = { id: `temp-${Date.now()}`, participant_mission_id: participantMissionId, participant_id: participantId, emoji }
@@ -594,7 +602,7 @@ export default function ActivityFeed({
       // Reload to sync with DB
       loadFeed()
     },
-    [participantId, loadFeed]
+    [participantId, accessCode, reactions, loadFeed]
   )
 
   // Add a comment
