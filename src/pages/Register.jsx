@@ -118,8 +118,10 @@ export default function Register() {
       const participant = rpcResult
       const accessCode = participant.access_code
 
-      // If event is active, assign missions immediately
-      if (event.status === 'active') {
+      // Assign missions immediately for upcoming or active events.
+      // Missions still respect unlock schedules — this just ensures late joiners
+      // don't end up with an empty slate once the event goes live.
+      if (event.status !== 'ended') {
         const { data: config } = await supabase
           .from('event_config')
           .select('*')

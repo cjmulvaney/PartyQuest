@@ -402,8 +402,9 @@ export default function EventDetail() {
       const phoneE164 = normalizePhone(newParticipantPhone)
       const newPart = await insertParticipantWithRetry(supabase, id, newParticipantName.trim(), 'manual', 3, phoneE164)
 
-      // If event is active, assign missions immediately
-      if (event.status === 'active' && config) {
+      // Assign missions immediately for upcoming or active events.
+      // Unlock schedules still control when participants actually see them.
+      if (event.status !== 'ended' && config) {
         try {
           await assignMissionsToParticipant(newPart, config)
         } catch (missionErr) {
