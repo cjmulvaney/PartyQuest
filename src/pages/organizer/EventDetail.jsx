@@ -44,6 +44,8 @@ export default function EventDetail() {
   const [savingEdit, setSavingEdit] = useState(false)
   const [sendingSms, setSendingSms] = useState(false)
   const [sendingFeedback, setSendingFeedback] = useState(false)
+  const [customMessage, setCustomMessage] = useState('')
+  const [sendingCustomSms, setSendingCustomSms] = useState(false)
   // Drag and drop — use refs for reliable access in event handlers, state for visuals
   const [dragSource, _setDragSource] = useState(null)
   const [dropTarget, _setDropTarget] = useState(null)
@@ -488,6 +490,28 @@ export default function EventDetail() {
       setError(err.message || 'Failed to send SMS')
     }
     setSendingSms(false)
+  }
+
+  async function handleSendCustomSms() {
+    if (!customMessage.trim()) return
+    setSendingCustomSms(true)
+    setError('')
+    try {
+      const { data, error: fnErr } = await supabase.functions.invoke('send-custom-sms', {
+        body: { eventId: id, message: customMessage.trim() },
+      })
+      if (fnErr) throw fnErr
+      if (data?.ok) {
+        setCopyToast(`Message sent to ${data.sent} participant${data.sent !== 1 ? 's' : ''}`)
+        setTimeout(() => setCopyToast(''), 3000)
+        setCustomMessage('')
+      } else {
+        setError(data?.error || 'Failed to send message')
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to send message')
+    }
+    setSendingCustomSms(false)
   }
 
   async function handleSendFeedbackSms() {
@@ -1247,6 +1271,51 @@ export default function EventDetail() {
           >
             Play as Participant
           </button>
+        )}
+
+        {/* Message all players */}
+        {!isEnded && activeParticipants.some((p) => p.phone) && (
+          <div className="pq-card mb-6 animate-fade-in">
+            <h3
+              className="mb-3"
+              style={{
+                fontFamily: 'var(--font-heading)',
+                fontSize: '1rem',
+                fontWeight: 700,
+                color: 'var(--color-text)',
+              }}
+            >
+              Message All Players
+            </h3>
+            <p className="mb-3" style={{ color: 'var(--color-text-muted)', fontSize: '0.8125rem', fontFamily: 'var(--font-body)' }}>
+              {(() => {
+                const count = activeParticipants.filter((p) => p.phone).length
+                return `Sends to ${count} participant${count !== 1 ? 's' : ''} with phone numbers`
+              })()}
+            </p>
+            <textarea
+              value={customMessage}
+              onChange={(e) => setCustomMessage(e.target.value)}
+              placeholder="e.g. New missions just dropped — check your page! or Dinner buffet is now open, come get food!"
+              className="pq-input w-full mb-3"
+              rows={3}
+              maxLength={320}
+              style={{ resize: 'vertical', fontFamily: 'var(--font-body)', fontSize: '0.875rem' }}
+            />
+            <div className="flex items-center justify-between gap-3">
+              <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', fontFamily: 'var(--font-body)' }}>
+                {customMessage.length} / 320
+              </span>
+              <button
+                onClick={handleSendCustomSms}
+                disabled={sendingCustomSms || !customMessage.trim()}
+                className="pq-btn pq-btn-primary"
+                style={{ fontSize: '0.8125rem' }}
+              >
+                {sendingCustomSms ? 'Sending...' : 'Send Message'}
+              </button>
+            </div>
+          </div>
         )}
 
         {/* Post-event summary */}
