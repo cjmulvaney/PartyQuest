@@ -59,7 +59,7 @@ export default function CreateEvent() {
   const [missionCount, setMissionCount] = useState(3)
   const [allocationMode, setAllocationMode] = useState('balanced')
   const [unlockType, setUnlockType] = useState('all_at_once')
-  const [unlockTimes, setUnlockTimes] = useState(['', ''])
+  const [batches, setBatches] = useState([{ count: 3, time: '' }])
   const [categories, setCategories] = useState([])
   const [selectedTags, setSelectedTags] = useState([])
   const [availableMissionCount, setAvailableMissionCount] = useState(0)
@@ -246,22 +246,25 @@ export default function CreateEvent() {
     countMissions()
   }, [selectedTags])
 
-  // Auto-fill timed unlock slots when switching to timed release
+  // Auto-fill batch times when switching to timed release
   useEffect(() => {
-    if (unlockType === 'timed' && startTime && endTime) {
-      const hasAnyFilled = unlockTimes.some((t) => t.trim() !== '')
+    if (unlockType === 'timed') {
+      const hasAnyFilled = batches.some((b) => b.time.trim() !== '')
       if (!hasAnyFilled) {
-        const start = new Date(startTime)
-        const end = new Date(endTime)
-        const totalMs = end.getTime() - start.getTime()
-        const slots = Math.max(missionCount, 2)
-        const newTimes = []
-        for (let i = 0; i < slots; i++) {
-          const offset = (totalMs * i) / (slots - 1 || 1)
-          const slotTime = new Date(start.getTime() + offset)
-          newTimes.push(formatDateTimeLocal(slotTime))
+        const startVal = startTime ? formatDateTimeLocal(new Date(startTime)) : ''
+        const midCount = Math.ceil(missionCount / 2)
+        const remainCount = missionCount - midCount
+        let midTime = ''
+        if (startTime && endTime) {
+          const start = new Date(startTime)
+          const end = new Date(endTime)
+          const mid = new Date((start.getTime() + end.getTime()) / 2)
+          midTime = formatDateTimeLocal(mid)
         }
-        setUnlockTimes(newTimes)
+        setBatches([
+          { count: midCount, time: startVal },
+          { count: remainCount, time: midTime },
+        ])
       }
     }
   }, [unlockType])
@@ -424,7 +427,7 @@ export default function CreateEvent() {
         // Update event config
         const schedule =
           unlockType === 'timed'
-            ? unlockTimes.filter((t) => t.trim()).map((t) => new Date(t).toISOString())
+            ? batches.flatMap((b) => Array(b.count).fill(new Date(b.time).toISOString()))
             : null
 
         const { error: configError } = await supabase
@@ -455,7 +458,7 @@ export default function CreateEvent() {
         // Insert event config
         const schedule =
           unlockType === 'timed'
-            ? unlockTimes.filter((t) => t.trim()).map((t) => new Date(t).toISOString())
+            ? batches.flatMap((b) => Array(b.count).fill(new Date(b.time).toISOString()))
             : null
 
         const { error: configError } = await supabase
@@ -546,12 +549,10 @@ export default function CreateEvent() {
       })
     }
 
-    // Build unlock schedule
+    // Build unlock schedule — expand each batch into N identical timestamps
     const schedule =
       unlockType === 'timed'
-        ? unlockTimes
-            .filter((t) => t.trim())
-            .map((t) => new Date(t).toISOString())
+        ? batches.flatMap((b) => Array(b.count).fill(new Date(b.time).toISOString()))
         : null
 
     const allRows = []
@@ -1185,99 +1186,207 @@ export default function CreateEvent() {
                     className="block mb-1.5"
                     style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}
                   >
-                    Unlock Type
+                    When do missions unlock for participants?
                   </label>
-                  <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: '0.75rem', lineHeight: 1.5 }}>
-                    All at once = guests see every mission from the start. Timed = missions reveal throughout the event to keep things exciting.
-                  </p>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-3">
+                    {/* All at once option */}
                     <button
                       type="button"
                       onClick={() => setUnlockType('all_at_once')}
-                      className={unlockType === 'all_at_once' ? 'pq-btn pq-btn-primary' : 'pq-btn pq-btn-secondary'}
-                      style={{ fontFamily: 'var(--font-body)', padding: '0.75rem 1rem' }}
+                      style={{
+                        fontFamily: 'var(--font-body)',
+                        textAlign: 'left',
+                        padding: '0.875rem 1rem',
+                        borderRadius: 'var(--radius-lg)',
+                        border: unlockType === 'all_at_once' ? '2px solid var(--color-primary)' : '1.5px solid var(--color-border-light)',
+                        background: unlockType === 'all_at_once' ? 'var(--color-primary-subtle)' : 'var(--color-surface)',
+                        cursor: 'pointer',
+                        transition: 'var(--transition-fast)',
+                      }}
                     >
-                      All at Once
+                      <div style={{ fontWeight: 700, fontSize: '0.875rem', color: 'var(--color-text)', marginBottom: '0.2rem' }}>
+                        All at once
+                      </div>
+                      <div style={{ fontSize: '0.775rem', color: 'var(--color-text-muted)', lineHeight: 1.4 }}>
+                        All {missionCount} missions are visible as soon as participants join. Simple and straightforward — good for most events.
+                      </div>
                     </button>
+
+                    {/* Batches option */}
                     <button
                       type="button"
                       onClick={() => setUnlockType('timed')}
-                      className={unlockType === 'timed' ? 'pq-btn pq-btn-primary' : 'pq-btn pq-btn-secondary'}
-                      style={{ fontFamily: 'var(--font-body)', padding: '0.75rem 1rem' }}
+                      style={{
+                        fontFamily: 'var(--font-body)',
+                        textAlign: 'left',
+                        padding: '0.875rem 1rem',
+                        borderRadius: 'var(--radius-lg)',
+                        border: unlockType === 'timed' ? '2px solid var(--color-primary)' : '1.5px solid var(--color-border-light)',
+                        background: unlockType === 'timed' ? 'var(--color-primary-subtle)' : 'var(--color-surface)',
+                        cursor: 'pointer',
+                        transition: 'var(--transition-fast)',
+                      }}
                     >
-                      Timed Release
+                      <div style={{ fontWeight: 700, fontSize: '0.875rem', color: 'var(--color-text)', marginBottom: '0.2rem' }}>
+                        Released in batches
+                      </div>
+                      <div style={{ fontSize: '0.775rem', color: 'var(--color-text-muted)', lineHeight: 1.4 }}>
+                        Missions unlock in groups at times you set. Participants see locked missions with a countdown — great for keeping energy high throughout a longer event.
+                      </div>
                     </button>
                   </div>
                 </div>
 
-                {/* Timed unlock inputs */}
-                {unlockType === 'timed' && (
-                  <div className="flex flex-col gap-3">
-                    <label
-                      className="block"
-                      style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}
-                    >
-                      Unlock Times
-                    </label>
-                    <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '-0.5rem', lineHeight: 1.4 }}>
-                      Pre-filled evenly across your event. Adjust as needed.
-                    </p>
-                    {unlockTimes.map((time, i) => (
-                      <div key={i} className="flex items-center gap-3">
-                        <span
+                {/* Batch builder */}
+                {unlockType === 'timed' && (() => {
+                  const batchTotal = batches.reduce((sum, b) => sum + (parseInt(b.count) || 0), 0)
+                  const isValid = batchTotal === missionCount
+                  return (
+                    <div className="flex flex-col gap-3">
+                      <div>
+                        <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-text)', marginBottom: '0.25rem' }}>
+                          Configure your batches
+                        </p>
+                        <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.75rem', color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+                          Each batch is a group of missions that unlock at the same time. The total across all batches must equal your mission count ({missionCount}).
+                        </p>
+                      </div>
+
+                      {batches.map((batch, i) => (
+                        <div
+                          key={i}
                           style={{
-                            fontFamily: 'var(--font-body)',
-                            fontSize: '0.8rem',
-                            color: 'var(--color-text-muted)',
-                            minWidth: '48px',
+                            display: 'grid',
+                            gridTemplateColumns: 'auto 1fr auto',
+                            gap: '0.75rem',
+                            alignItems: 'center',
+                            padding: '0.75rem',
+                            borderRadius: 'var(--radius-md)',
+                            background: 'var(--color-surface)',
+                            border: '1px solid var(--color-border-light)',
                           }}
                         >
-                          Slot {i + 1}
-                        </span>
-                        <input
-                          type="datetime-local"
-                          value={time}
-                          onChange={(e) => {
-                            const updated = [...unlockTimes]
-                            updated[i] = e.target.value
-                            setUnlockTimes(updated)
-                          }}
-                          className="pq-input flex-1"
-                        />
-                        {unlockTimes.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const updated = unlockTimes.filter((_, idx) => idx !== i)
-                              setUnlockTimes(updated)
-                            }}
-                            className="pq-btn pq-btn-ghost"
-                            style={{ padding: '0.375rem', color: 'var(--color-text-muted)', minWidth: 'auto' }}
-                            aria-label="Remove slot"
-                          >
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                            </svg>
-                          </button>
-                        )}
+                          {/* Batch label + stepper */}
+                          <div className="flex flex-col gap-1" style={{ minWidth: '120px' }}>
+                            <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.7rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                              Batch {i + 1}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = [...batches]
+                                  updated[i] = { ...updated[i], count: Math.max(1, (parseInt(updated[i].count) || 1) - 1) }
+                                  setBatches(updated)
+                                }}
+                                style={{
+                                  width: '28px', height: '28px', borderRadius: '50%',
+                                  border: '1.5px solid var(--color-border)',
+                                  background: 'var(--color-bg)',
+                                  fontFamily: 'var(--font-body)', fontSize: '1rem',
+                                  color: 'var(--color-text)', cursor: 'pointer',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  lineHeight: 1,
+                                }}
+                                aria-label="Decrease mission count"
+                              >−</button>
+                              <span style={{ fontFamily: 'var(--font-body)', fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)', minWidth: '20px', textAlign: 'center' }}>
+                                {batch.count}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = [...batches]
+                                  updated[i] = { ...updated[i], count: (parseInt(updated[i].count) || 0) + 1 }
+                                  setBatches(updated)
+                                }}
+                                style={{
+                                  width: '28px', height: '28px', borderRadius: '50%',
+                                  border: '1.5px solid var(--color-border)',
+                                  background: 'var(--color-bg)',
+                                  fontFamily: 'var(--font-body)', fontSize: '1rem',
+                                  color: 'var(--color-text)', cursor: 'pointer',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  lineHeight: 1,
+                                }}
+                                aria-label="Increase mission count"
+                              >+</button>
+                              <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                                {batch.count === 1 ? 'mission' : 'missions'}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Datetime picker */}
+                          <div className="flex flex-col gap-1">
+                            <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.7rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                              Unlock at
+                            </span>
+                            <input
+                              type="datetime-local"
+                              value={batch.time}
+                              onChange={(e) => {
+                                const updated = [...batches]
+                                updated[i] = { ...updated[i], time: e.target.value }
+                                setBatches(updated)
+                              }}
+                              className="pq-input"
+                              style={{ fontSize: '0.8rem' }}
+                            />
+                          </div>
+
+                          {/* Remove button */}
+                          {batches.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => setBatches(batches.filter((_, idx) => idx !== i))}
+                              className="pq-btn pq-btn-ghost"
+                              style={{ padding: '0.375rem', color: 'var(--color-text-muted)', minWidth: 'auto', alignSelf: 'flex-end' }}
+                              aria-label="Remove batch"
+                            >
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                              </svg>
+                            </button>
+                          )}
+                        </div>
+                      ))}
+
+                      <button
+                        type="button"
+                        onClick={() => setBatches([...batches, { count: 1, time: '' }])}
+                        className="pq-btn pq-btn-ghost"
+                        style={{
+                          fontFamily: 'var(--font-body)',
+                          color: 'var(--color-primary)',
+                          fontWeight: 600,
+                          fontSize: '0.875rem',
+                          alignSelf: 'flex-start',
+                        }}
+                      >
+                        + Add batch
+                      </button>
+
+                      {/* Running total */}
+                      <div
+                        style={{
+                          padding: '0.625rem 0.875rem',
+                          borderRadius: 'var(--radius-md)',
+                          background: isValid ? 'var(--color-success-subtle, #f0fdf4)' : 'var(--color-warning-subtle, #fffbeb)',
+                          border: `1px solid ${isValid ? 'var(--color-success-light, #86efac)' : 'var(--color-warning-light, #fcd34d)'}`,
+                          fontFamily: 'var(--font-body)',
+                          fontSize: '0.8rem',
+                          color: isValid ? 'var(--color-success, #16a34a)' : 'var(--color-warning, #b45309)',
+                          fontWeight: 600,
+                        }}
+                      >
+                        {isValid
+                          ? `✓ ${batchTotal} of ${missionCount} missions scheduled across ${batches.length} ${batches.length === 1 ? 'batch' : 'batches'}`
+                          : `${batchTotal} of ${missionCount} missions assigned — adjust your batch sizes to match`}
                       </div>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={() => setUnlockTimes([...unlockTimes, ''])}
-                      className="pq-btn pq-btn-ghost"
-                      style={{
-                        fontFamily: 'var(--font-body)',
-                        color: 'var(--color-primary)',
-                        fontWeight: 600,
-                        fontSize: '0.875rem',
-                        alignSelf: 'flex-start',
-                      }}
-                    >
-                      + Add unlock time
-                    </button>
-                  </div>
-                )}
+                    </div>
+                  )
+                })()}
 
                 {/* Categories — expandable with mission preview */}
                 <div>
