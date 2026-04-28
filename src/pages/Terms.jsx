@@ -49,10 +49,7 @@ export default function Terms() {
               <li>Use the service only for its intended purpose (participating in or hosting events)</li>
               <li>Not attempt to manipulate scores, exploit bugs, or disrupt other participants</li>
             </ul>
-            <p>
-              Party Quest is intended for users 13 and older. Users under 18 should have parental
-              awareness of their participation.
-            </p>
+
           </Section>
 
           <Section title="SMS Messaging">
