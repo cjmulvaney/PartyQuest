@@ -324,8 +324,24 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Spacer for bottom breathing room */}
-        <div className="h-8" />
+        {/* Footer links */}
+        <div
+          className="w-full flex justify-center gap-4 pb-2 pt-4"
+          style={{ borderTop: '1px solid var(--color-border-light)', marginTop: 16 }}
+        >
+          <a
+            href="/privacy"
+            style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', textDecoration: 'none' }}
+          >
+            Privacy Policy
+          </a>
+          <a
+            href="/terms"
+            style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', textDecoration: 'none' }}
+          >
+            Terms of Service
+          </a>
+        </div>
       </div>
     </div>
   )

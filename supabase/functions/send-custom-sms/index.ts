@@ -104,7 +104,7 @@ serve(async (req) => {
             body: new URLSearchParams({
               To: p.phone,
               From: twilioPhone,
-              Body: message.trim(),
+              Body: `${message.trim()}\nReply STOP to opt out.`,
             }),
           })
 

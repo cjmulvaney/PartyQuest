@@ -18,6 +18,8 @@ import FeedbackPage from './pages/admin/FeedbackPage.jsx'
 import OrganizersPage from './pages/admin/OrganizersPage.jsx'
 import MetricsPage from './pages/admin/MetricsPage.jsx'
 import Feedback from './pages/Feedback.jsx'
+import Privacy from './pages/Privacy.jsx'
+import Terms from './pages/Terms.jsx'
 
 export default function App() {
   return (
@@ -31,6 +33,8 @@ export default function App() {
           <Route path="/spectator" element={<Spectator />} />
           <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="/feedback/:token" element={<Feedback />} />
+          <Route path="/privacy" element={<Privacy />} />
+          <Route path="/terms" element={<Terms />} />
           <Route path="/organizer" element={<Dashboard />} />
           <Route path="/organizer/new" element={<CreateEvent />} />
           <Route path="/organizer/event/:id" element={<EventDetail />} />

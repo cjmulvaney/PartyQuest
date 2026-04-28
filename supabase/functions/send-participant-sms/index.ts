@@ -42,7 +42,7 @@ serve(async (req) => {
       })
     }
 
-    const playUrl = `https://party-quest-six.vercel.app/play/${accessCode}`
+    const playUrl = `https://partyquest.connormulvaney.com/play/${accessCode}`
 
     const messageBody = [
       `Party Quest: You're in, ${name}!`,
@@ -55,6 +55,7 @@ serve(async (req) => {
       `Play now: ${playUrl}`,
       '',
       `Save this link — you'll need it to rejoin.`,
+      `Reply STOP to opt out.`,
     ].filter(Boolean).join('\n')
 
     // Send via Twilio REST API

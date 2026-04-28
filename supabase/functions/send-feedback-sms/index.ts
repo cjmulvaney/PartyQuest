@@ -115,7 +115,7 @@ serve(async (req) => {
 
     const results = await Promise.all(
       participants.map(async (p) => {
-        const feedbackUrl = `https://party-quest-six.vercel.app/feedback/${p.access_code}`
+        const feedbackUrl = `https://partyquest.connormulvaney.com/feedback/${p.access_code}`
         const messageBody = [
           `Party Quest: ${event.name} has ended!`,
           '',

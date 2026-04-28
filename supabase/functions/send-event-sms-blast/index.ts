@@ -111,7 +111,7 @@ serve(async (req) => {
 
     const results = await Promise.all(
       participants.map(async (p) => {
-        const playUrl = `https://party-quest-six.vercel.app/play/${p.access_code}`
+        const playUrl = `https://partyquest.connormulvaney.com/play/${p.access_code}`
 
         let messageBody: string
         if (scenario === 'reminder') {
@@ -122,6 +122,7 @@ serve(async (req) => {
             `Event Code: ${event.event_code}`,
             `Your Access Code: ${p.access_code}`,
             `Play: ${playUrl}`,
+            `Reply STOP to opt out.`,
           ].join('\n')
         } else {
           messageBody = [
@@ -133,6 +134,7 @@ serve(async (req) => {
             `Play: ${playUrl}`,
             '',
             `Start your missions now!`,
+            `Reply STOP to opt out.`,
           ].join('\n')
         }
 

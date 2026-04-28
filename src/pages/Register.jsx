@@ -483,7 +483,10 @@ export default function Register() {
               />
               {phone.trim() ? (
                 <p className="mt-2" style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontFamily: 'var(--font-body)', lineHeight: 1.5 }}>
-                  By entering your number, you agree to receive text messages from Party Quest about this event — your access code, mission updates, and a post-event feedback request. Msg frequency varies. Msg & data rates may apply. Reply STOP to opt out, HELP for help.
+                  By entering your number, you agree to receive SMS from <strong style={{ color: 'var(--color-text)' }}>Party Quest</strong> about this event — your access code, event start notification, and a post-event survey. Msg frequency varies (typically 2–4 msgs/event). Msg &amp; data rates may apply. Reply STOP to opt out, HELP for help.{' '}
+                  <a href="/privacy" style={{ color: 'var(--color-primary)' }}>Privacy Policy</a>
+                  {' · '}
+                  <a href="/terms" style={{ color: 'var(--color-primary)' }}>Terms</a>
                 </p>
               ) : (
                 <p className="mt-1" style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontFamily: 'var(--font-body)' }}>
