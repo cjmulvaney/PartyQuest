@@ -279,6 +279,62 @@ export default function HowItWorks() {
         ))}
       </section>
 
+
+      {/* Organizer Guide link */}
+      <section style={{ maxWidth: '540px', margin: '0 auto', padding: '0 24px 8px' }}>
+        <div style={{
+          background: 'var(--color-accent-light)',
+          border: '1px solid var(--color-accent)',
+          borderRadius: 'var(--radius-lg)',
+          padding: '16px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '12px',
+        }}>
+          <div>
+            <p style={{
+              fontFamily: 'var(--font-heading)',
+              fontWeight: 700,
+              fontSize: '0.9375rem',
+              color: 'var(--color-text)',
+              margin: '0 0 2px',
+            }}>
+              Hosting for the first time?
+            </p>
+            <p style={{
+              fontSize: '0.875rem',
+              color: 'var(--color-text-secondary)',
+              margin: 0,
+              lineHeight: 1.5,
+            }}>
+              Read the organizer guide — what Party Quest is, why it works, and tips for a great event.
+            </p>
+          </div>
+          <button
+            onClick={() => navigate('/organizer-guide')}
+            style={{
+              fontFamily: 'var(--font-body)',
+              fontSize: '0.875rem',
+              fontWeight: 600,
+              color: 'var(--color-text)',
+              background: 'var(--color-accent)',
+              border: 'none',
+              borderRadius: 'var(--radius-full)',
+              padding: '8px 16px',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
+              transition: 'background var(--transition-fast)',
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = 'var(--color-accent-hover)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'var(--color-accent)'}
+          >
+            Read guide →
+          </button>
+        </div>
+      </section>
+
       {/* Bottom CTA */}
       <section style={{
         padding: '48px 24px 56px',
