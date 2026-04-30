@@ -4,46 +4,35 @@ import { useTheme } from '../hooks/useTheme.jsx'
 const steps = [
   {
     number: '1',
-    title: 'Get Your Invite',
-    description: 'Your host creates an event and sends you a link or access code.',
-    icon: (
-      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="2" y="4" width="20" height="16" rx="2" />
-        <path d="M22 4L12 13L2 4" />
-      </svg>
-    ),
+    heading: 'You set it up in minutes',
+    description: 'Name your event, pick the types of missions you want, and get a shareable link or join code for your guests.',
+    image: '/screenshots/org-create-event.png',
+    alt: 'Creating an event in Party Quest',
+    narrow: false,
   },
   {
     number: '2',
-    title: 'Receive Secret Missions',
-    description: 'Start conversations, pull off dares, or share stories -- all in secret.',
-    icon: (
-      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-      </svg>
-    ),
+    heading: 'Guests join on their phone',
+    description: 'No app download needed. They open your link, enter their name, and they\'re in.',
+    image: '/screenshots/participant-signup.png',
+    alt: 'Guest joining a Party Quest event',
+    narrow: true,
   },
   {
     number: '3',
-    title: 'Complete & Earn Points',
-    description: 'Check off missions during the event and rack up points.',
-    icon: (
-      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-      </svg>
-    ),
+    heading: 'Everyone gets secret missions',
+    description: 'Each guest gets their own personal challenges — start conversations, pull off dares, share stories. Only they can see theirs.',
+    image: '/screenshots/participant-missions.png',
+    alt: 'Guest viewing their secret missions',
+    narrow: true,
   },
   {
     number: '4',
-    title: 'Climb the Leaderboard',
-    description: 'Watch the live rankings and see who comes out on top.',
-    icon: (
-      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <line x1="18" y1="20" x2="18" y2="10" />
-        <line x1="12" y1="20" x2="12" y2="4" />
-        <line x1="6" y1="20" x2="6" y2="14" />
-      </svg>
-    ),
+    heading: 'Points, leaderboard, bragging rights',
+    description: 'Guests earn points as they complete missions. A live leaderboard keeps the energy up all night.',
+    image: '/screenshots/participant-leaderboard.png',
+    alt: 'Live leaderboard',
+    narrow: true,
   },
 ]
 
@@ -52,297 +41,302 @@ export default function Home() {
   const { theme, toggleTheme } = useTheme()
 
   return (
-    <div
-      className="pq-bg-texture min-h-screen flex flex-col items-center px-4 py-8 relative overflow-hidden"
-      style={{ background: 'var(--color-bg)' }}
-    >
-      {/* Decorative background shapes */}
-      <div
-        aria-hidden="true"
-        style={{
-          position: 'absolute',
-          top: '-120px',
-          right: '-80px',
-          width: '320px',
-          height: '320px',
-          borderRadius: '50%',
-          background: 'var(--color-primary-subtle)',
-          opacity: 0.6,
-          filter: 'blur(60px)',
-          pointerEvents: 'none',
-        }}
-      />
-      <div
-        aria-hidden="true"
-        style={{
-          position: 'absolute',
-          top: '200px',
-          left: '-100px',
-          width: '280px',
-          height: '280px',
-          borderRadius: '50%',
-          background: 'var(--color-secondary-light)',
-          opacity: 0.5,
-          filter: 'blur(60px)',
-          pointerEvents: 'none',
-        }}
-      />
-      <div
-        aria-hidden="true"
-        style={{
-          position: 'absolute',
-          bottom: '100px',
-          right: '-40px',
-          width: '200px',
-          height: '200px',
-          borderRadius: '50%',
-          background: 'var(--color-accent-light)',
-          opacity: 0.5,
-          filter: 'blur(50px)',
-          pointerEvents: 'none',
-        }}
-      />
+    <div style={{ background: 'var(--color-bg)', minHeight: '100vh' }}>
 
-      {/* Dark mode toggle */}
-      <div className="w-full max-w-md flex justify-end relative z-10 animate-fade-in">
-        <button
-          className="theme-toggle"
-          data-active={theme === 'dark'}
-          onClick={toggleTheme}
-          aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-        />
-      </div>
-
-      <div className="max-w-md w-full flex flex-col items-center relative z-10 flex-1">
-        {/* Hero */}
-        <div className="text-center mt-8 mb-10 animate-fade-in">
-          {/* Decorative accent dot */}
-          <div
-            className="mx-auto mb-5 animate-scale-in"
-            style={{
-              width: '56px',
-              height: '56px',
-              borderRadius: 'var(--radius-xl)',
-              background: 'linear-gradient(135deg, var(--color-primary), var(--color-secondary))',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: 'var(--shadow-glow)',
-            }}
+      {/* Nav */}
+      <header style={{
+        background: 'var(--color-surface)',
+        borderBottom: '1px solid var(--color-border-light)',
+        padding: '14px 20px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        position: 'sticky',
+        top: 0,
+        zIndex: 10,
+        boxShadow: 'var(--shadow-sm)',
+      }}>
+        <span style={{
+          fontFamily: 'var(--font-heading)',
+          fontSize: '1.25rem',
+          fontWeight: 700,
+          color: 'var(--color-primary)',
+        }}>
+          Party Quest
+        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button
+            onClick={() => navigate('/how-it-works')}
+            className="pq-btn pq-btn-ghost"
+            style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}
           >
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M6 9l6 6 6-6" />
-              <path d="M12 3v12" />
-              <path d="M5 21h14" />
-            </svg>
-          </div>
-
-          <h1
-            className="animate-slide-up stagger-1"
-            style={{
-              fontFamily: 'var(--font-heading)',
-              fontSize: 'clamp(2.5rem, 8vw, 3.5rem)',
-              fontWeight: 700,
-              color: 'var(--color-text)',
-              lineHeight: 1.1,
-              letterSpacing: '-0.02em',
-              margin: 0,
-            }}
-          >
-            Party Quest
-          </h1>
-
-          <p
-            className="animate-slide-up stagger-2 mt-4"
-            style={{
-              fontSize: '1.125rem',
-              color: 'var(--color-text-secondary)',
-              lineHeight: 1.6,
-              maxWidth: '320px',
-              margin: '16px auto 0',
-            }}
-          >
-            Secret missions. Live leaderboard.
-            <br />
-            Make your next event{' '}
-            <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>
-              unforgettable
-            </span>
-            .
-          </p>
-          <p
-            className="animate-slide-up stagger-2"
-            style={{
-              fontSize: '0.875rem',
-              color: 'var(--color-text-muted)',
-              lineHeight: 1.6,
-              maxWidth: '280px',
-              margin: '10px auto 0',
-            }}
-          >
-            Your host gives everyone secret social missions to complete during the event — things to say, do, or pull off. Finish them, earn points, and see where you land on the live leaderboard.
-          </p>
+            How it works
+          </button>
+          <button
+            className="theme-toggle"
+            data-active={theme === 'dark'}
+            onClick={toggleTheme}
+            aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+          />
         </div>
+      </header>
 
-        {/* Primary CTA */}
-        <button
-          onClick={() => navigate('/join')}
-          className="pq-btn pq-btn-primary animate-scale-in stagger-3"
+      {/* Hero */}
+      <section style={{
+        padding: '52px 24px 44px',
+        textAlign: 'center',
+        maxWidth: '540px',
+        margin: '0 auto',
+      }}>
+        {/* Logo badge */}
+        <div
+          className="animate-scale-in"
           style={{
-            width: '100%',
-            fontSize: '1.125rem',
-            padding: '14px 24px',
+            width: '60px',
+            height: '60px',
             borderRadius: 'var(--radius-xl)',
+            background: 'linear-gradient(135deg, var(--color-primary), var(--color-secondary))',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto 24px',
             boxShadow: 'var(--shadow-glow)',
           }}
         >
-          Join Event
-        </button>
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+          </svg>
+        </div>
 
-        {/* How it works */}
-        <div className="w-full mt-12 animate-slide-up stagger-4">
-          <h2
-            className="mb-5"
+        <h1
+          className="animate-slide-up stagger-1"
+          style={{
+            fontFamily: 'var(--font-heading)',
+            fontSize: 'clamp(2rem, 8vw, 2.75rem)',
+            fontWeight: 700,
+            color: 'var(--color-text)',
+            lineHeight: 1.15,
+            letterSpacing: '-0.02em',
+            margin: '0 0 16px',
+          }}
+        >
+          The social game your guests will actually talk about.
+        </h1>
+
+        <p
+          className="animate-slide-up stagger-2"
+          style={{
+            fontSize: '1.0625rem',
+            color: 'var(--color-text-secondary)',
+            lineHeight: 1.65,
+            margin: '0 0 32px',
+          }}
+        >
+          Give everyone at your party secret missions to complete.
+          They earn points, you watch it unfold.
+        </p>
+
+        <div className="animate-slide-up stagger-3" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <button
+            onClick={() => navigate('/organizer')}
+            className="pq-btn pq-btn-primary"
             style={{
-              fontFamily: 'var(--font-heading)',
-              fontSize: '1.25rem',
-              fontWeight: 600,
-              color: 'var(--color-text)',
-              textAlign: 'center',
+              width: '100%',
+              fontSize: '1.0625rem',
+              padding: '15px 24px',
+              borderRadius: 'var(--radius-xl)',
+              boxShadow: 'var(--shadow-glow)',
             }}
           >
-            How it works
-          </h2>
-
-          <div className="grid grid-cols-2 gap-3">
-            {steps.map((step, i) => (
-              <div
-                key={step.number}
-                className={`pq-card animate-slide-up stagger-${i + 3}`}
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  textAlign: 'center',
-                  padding: '20px 14px',
-                }}
-              >
-                {/* Step icon */}
-                <div
-                  style={{
-                    width: '48px',
-                    height: '48px',
-                    borderRadius: 'var(--radius-lg)',
-                    background: i === 0 ? 'var(--color-primary-light)' :
-                                i === 1 ? 'var(--color-secondary-light)' :
-                                i === 2 ? 'var(--color-accent-light)' :
-                                          'var(--color-primary-subtle)',
-                    color: i === 0 ? 'var(--color-primary)' :
-                           i === 1 ? 'var(--color-secondary)' :
-                           i === 2 ? 'var(--color-accent-hover)' :
-                                     'var(--color-primary)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginBottom: '10px',
-                    flexShrink: 0,
-                  }}
-                >
-                  {step.icon}
-                </div>
-
-                {/* Step number badge */}
-                <span
-                  className="pq-badge pq-badge-muted"
-                  style={{ fontSize: '11px', marginBottom: '6px' }}
-                >
-                  Step {step.number}
-                </span>
-
-                <h3
-                  style={{
-                    fontFamily: 'var(--font-heading)',
-                    fontSize: '0.875rem',
-                    fontWeight: 600,
-                    color: 'var(--color-text)',
-                    margin: '0 0 4px',
-                  }}
-                >
-                  {step.title}
-                </h3>
-
-                <p
-                  style={{
-                    fontSize: '0.8rem',
-                    color: 'var(--color-text-muted)',
-                    lineHeight: 1.4,
-                    margin: 0,
-                  }}
-                >
-                  {step.description}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Organizer section */}
-        <div
-          className="w-full mt-10 pt-8 animate-fade-in stagger-6"
-          style={{ borderTop: '1px solid var(--color-border-light)' }}
-        >
-          <h3
-            className="mb-4 text-center"
+            Host an Event
+          </button>
+          <button
+            onClick={() => navigate('/join')}
+            className="pq-btn pq-btn-ghost"
             style={{
-              fontFamily: 'var(--font-heading)',
-              fontSize: '1rem',
-              fontWeight: 600,
-              color: 'var(--color-text-secondary)',
+              width: '100%',
+              fontSize: '0.9375rem',
+              padding: '13px 24px',
+              borderRadius: 'var(--radius-xl)',
+              border: '1.5px solid var(--color-border)',
             }}
           >
-            Hosting an event?
-          </h3>
-
-          <div className="flex gap-3">
-            <button
-              onClick={() => navigate('/organizer')}
-              className="pq-btn pq-btn-secondary flex-1"
-              style={{ borderRadius: 'var(--radius-xl)' }}
-            >
-              Create Event
-            </button>
-            <button
-              onClick={() => navigate('/spectator')}
-              className="pq-btn pq-btn-ghost flex-1"
-              style={{
-                borderRadius: 'var(--radius-xl)',
-                border: '1.5px solid var(--color-border)',
-              }}
-            >
-              Spectator View
-            </button>
-          </div>
+            Join an Event
+          </button>
         </div>
+      </section>
 
-        {/* Footer links */}
-        <div
-          className="w-full flex justify-center gap-4 pb-2 pt-4"
-          style={{ borderTop: '1px solid var(--color-border-light)', marginTop: 16 }}
-        >
-          <a
-            href="/privacy"
-            style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', textDecoration: 'none' }}
-          >
-            Privacy Policy
-          </a>
-          <a
-            href="/terms"
-            style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', textDecoration: 'none' }}
-          >
-            Terms of Service
-          </a>
-        </div>
+      {/* Divider label */}
+      <div style={{
+        textAlign: 'center',
+        padding: '0 24px 24px',
+      }}>
+        <span style={{
+          fontSize: '0.7rem',
+          fontWeight: 700,
+          letterSpacing: '0.1em',
+          textTransform: 'uppercase',
+          color: 'var(--color-text-muted)',
+          fontFamily: 'var(--font-body)',
+        }}>
+          How it works
+        </span>
       </div>
+
+      {/* Steps with screenshots */}
+      <section style={{ paddingBottom: '16px' }}>
+        {steps.map((step, i) => (
+          <div
+            key={step.number}
+            className="animate-fade-in"
+            style={{
+              padding: '28px 24px 36px',
+              borderTop: '1px solid var(--color-border-light)',
+              maxWidth: '540px',
+              margin: '0 auto',
+              width: '100%',
+              boxSizing: 'border-box',
+            }}
+          >
+            {/* Step number + heading */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+              <span style={{
+                width: '28px',
+                height: '28px',
+                borderRadius: 'var(--radius-full)',
+                background: 'var(--color-primary)',
+                color: 'white',
+                fontFamily: 'var(--font-heading)',
+                fontWeight: 700,
+                fontSize: '0.875rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}>
+                {step.number}
+              </span>
+              <h2 style={{
+                fontFamily: 'var(--font-heading)',
+                fontSize: '1.25rem',
+                fontWeight: 700,
+                color: 'var(--color-text)',
+                margin: 0,
+                lineHeight: 1.2,
+              }}>
+                {step.heading}
+              </h2>
+            </div>
+
+            <p style={{
+              fontSize: '0.9375rem',
+              color: 'var(--color-text-secondary)',
+              lineHeight: 1.6,
+              margin: '0 0 20px 40px',
+            }}>
+              {step.description}
+            </p>
+
+            {/* Screenshot */}
+            <div style={{
+              borderRadius: 'var(--radius-lg)',
+              overflow: 'hidden',
+              boxShadow: 'var(--shadow-lg)',
+              border: '1px solid var(--color-border-light)',
+              maxWidth: step.narrow ? '260px' : '100%',
+              margin: step.narrow ? '0 auto' : '0',
+            }}>
+              <img
+                src={step.image}
+                alt={step.alt}
+                style={{ width: '100%', display: 'block' }}
+                loading="lazy"
+              />
+            </div>
+          </div>
+        ))}
+
+        {/* Full walkthrough link */}
+        <div style={{ textAlign: 'center', padding: '8px 24px 32px', maxWidth: '540px', margin: '0 auto' }}>
+          <button
+            onClick={() => navigate('/how-it-works')}
+            className="pq-btn pq-btn-ghost"
+            style={{
+              fontSize: '0.9rem',
+              color: 'var(--color-primary)',
+              border: 'none',
+              padding: '8px 16px',
+            }}
+          >
+            See the full walkthrough →
+          </button>
+        </div>
+      </section>
+
+      {/* Bottom CTA */}
+      <section style={{
+        padding: '40px 24px 48px',
+        textAlign: 'center',
+        background: 'var(--color-surface)',
+        borderTop: '1px solid var(--color-border-light)',
+      }}>
+        <div style={{ maxWidth: '420px', margin: '0 auto' }}>
+          <h2 style={{
+            fontFamily: 'var(--font-heading)',
+            fontSize: '1.625rem',
+            fontWeight: 700,
+            color: 'var(--color-text)',
+            margin: '0 0 8px',
+            lineHeight: 1.2,
+          }}>
+            Ready to host one?
+          </h2>
+          <p style={{
+            fontSize: '0.9375rem',
+            color: 'var(--color-text-secondary)',
+            margin: '0 0 24px',
+            lineHeight: 1.5,
+          }}>
+            Free to use. Takes about 5 minutes to set up.
+          </p>
+          <button
+            onClick={() => navigate('/organizer')}
+            className="pq-btn pq-btn-primary"
+            style={{
+              width: '100%',
+              fontSize: '1.0625rem',
+              padding: '15px 24px',
+              borderRadius: 'var(--radius-xl)',
+              boxShadow: 'var(--shadow-glow)',
+            }}
+          >
+            Host an Event
+          </button>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer style={{
+        padding: '16px 24px',
+        borderTop: '1px solid var(--color-border-light)',
+        display: 'flex',
+        justifyContent: 'center',
+        gap: '20px',
+      }}>
+        <a
+          href="/privacy"
+          style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', textDecoration: 'none' }}
+        >
+          Privacy Policy
+        </a>
+        <a
+          href="/terms"
+          style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', textDecoration: 'none' }}
+        >
+          Terms of Service
+        </a>
+      </footer>
+
     </div>
   )
 }
