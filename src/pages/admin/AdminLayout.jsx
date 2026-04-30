@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { to: '/admin/events', label: 'Events' },
   { to: '/admin/feedback', label: 'Feedback' },
   { to: '/admin/organizers', label: 'Organizers' },
+  { to: '/admin/users', label: 'Users' },
   { to: '/admin/metrics', label: 'Metrics' },
 ]
 

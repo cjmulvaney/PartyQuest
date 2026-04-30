@@ -16,6 +16,7 @@ import MissionsPage from './pages/admin/MissionsPage.jsx'
 import EventsPage from './pages/admin/EventsPage.jsx'
 import FeedbackPage from './pages/admin/FeedbackPage.jsx'
 import OrganizersPage from './pages/admin/OrganizersPage.jsx'
+import UsersPage from './pages/admin/UsersPage.jsx'
 import MetricsPage from './pages/admin/MetricsPage.jsx'
 import Feedback from './pages/Feedback.jsx'
 import Privacy from './pages/Privacy.jsx'
@@ -44,6 +45,7 @@ export default function App() {
             <Route path="events" element={<EventsPage />} />
             <Route path="feedback" element={<FeedbackPage />} />
             <Route path="organizers" element={<OrganizersPage />} />
+            <Route path="users" element={<UsersPage />} />
             <Route path="metrics" element={<MetricsPage />} />
           </Route>
         </Routes>
