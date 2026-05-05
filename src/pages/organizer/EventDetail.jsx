@@ -1085,7 +1085,8 @@ export default function EventDetail() {
       ? (totalCompletions / activeParticipants.length).toFixed(1)
       : '0'
 
-  const inviteLink = `${window.location.origin}/register/${event.event_code}`
+  const APP_URL = import.meta.env.VITE_APP_URL || window.location.origin
+  const inviteLink = `${APP_URL}/register/${event.event_code}`
 
   const tabItems = [
     { key: 'participants', label: 'Participants' },
@@ -1432,7 +1433,7 @@ export default function EventDetail() {
                     wordBreak: 'break-all',
                   }}
                 >
-                  {`${window.location.origin}/feedback/${event.event_code}`}
+                  {`${APP_URL}/feedback/${event.event_code}`}
                 </p>
               </div>
               <div
@@ -1444,7 +1445,7 @@ export default function EventDetail() {
                 }}
               >
                 <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(`${window.location.origin}/feedback/${event.event_code}`)}`}
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(`${APP_URL}/feedback/${event.event_code}`)}`}
                   alt="Feedback QR Code"
                   width={160}
                   height={160}

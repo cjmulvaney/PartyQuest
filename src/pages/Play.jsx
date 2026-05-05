@@ -85,7 +85,7 @@ export default function Play() {
 
     const { data: evt } = await supabase
       .from('events')
-      .select('id, name, status, anonymity_enabled, feed_mode, feed_photos_enabled, feed_comments_enabled, feed_reactions_enabled, feed_interactive_comments_enabled, feed_hidden')
+      .select('id, name, status, start_time, anonymity_enabled, feed_mode, feed_photos_enabled, feed_comments_enabled, feed_reactions_enabled, feed_interactive_comments_enabled, feed_hidden')
       .eq('id', part.event_id)
       .single()
 
@@ -222,6 +222,7 @@ export default function Play() {
   }
 
   const now = new Date()
+  const eventStarted = !event?.start_time || new Date(event.start_time) <= now
   const completedCount = missions.filter(m => m.completed).length
   const totalCount = missions.length
 
@@ -331,24 +332,48 @@ export default function Play() {
             <h2 style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: '1.1rem', color: 'var(--color-text)', margin: 0 }}>
               Your Missions
             </h2>
-            {missions.length === 0 && (
-              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
-                No missions assigned yet. Check back soon!
-              </p>
+            {!eventStarted ? (
+              <div
+                className="pq-card animate-scale-in"
+                style={{ textAlign: 'center', padding: '2rem 1.5rem' }}
+              >
+                <p style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>🔒</p>
+                <h3 style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: '1rem', color: 'var(--color-text)', marginBottom: '0.5rem' }}>
+                  Missions unlock when the event starts
+                </h3>
+                <p style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem', fontFamily: 'var(--font-body)', lineHeight: 1.5 }}>
+                  You're registered and ready to go. Come back at{' '}
+                  <strong style={{ color: 'var(--color-text-secondary)' }}>
+                    {new Date(event.start_time).toLocaleString('en-US', {
+                      weekday: 'short', month: 'short', day: 'numeric',
+                      hour: 'numeric', minute: '2-digit',
+                    })}
+                  </strong>
+                  {' '}to see your missions.
+                </p>
+              </div>
+            ) : (
+              <>
+                {missions.length === 0 && (
+                  <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
+                    No missions assigned yet. Check back soon!
+                  </p>
+                )}
+                {missions.map((pm) => {
+                  const isLocked = pm.unlock_time && new Date(pm.unlock_time) > now
+                  if (isLocked) {
+                    return <LockedMission key={pm.id} unlockTime={pm.unlock_time} />
+                  }
+                  return (
+                    <MissionCard
+                      key={pm.id}
+                      mission={pm}
+                      onSave={handleMissionSave}
+                    />
+                  )
+                })}
+              </>
             )}
-            {missions.map((pm) => {
-              const isLocked = pm.unlock_time && new Date(pm.unlock_time) > now
-              if (isLocked) {
-                return <LockedMission key={pm.id} unlockTime={pm.unlock_time} />
-              }
-              return (
-                <MissionCard
-                  key={pm.id}
-                  mission={pm}
-                  onSave={handleMissionSave}
-                />
-              )
-            })}
           </div>
         )}
 
