@@ -1085,8 +1085,11 @@ export default function EventDetail() {
       ? (totalCompletions / activeParticipants.length).toFixed(1)
       : '0'
 
-  const APP_URL = import.meta.env.VITE_APP_URL || window.location.origin
-  const inviteLink = `${APP_URL}/register/${event.event_code}`
+  const APP_URL = (import.meta.env.VITE_APP_URL || window.location.origin).trim()
+  const organizerFirstName = user?.user_metadata?.full_name?.split(' ')[0] || user?.user_metadata?.name?.split(' ')[0] || null
+  const inviteLink = organizerFirstName
+    ? `${APP_URL}/register/${event.event_code.trim()}?from=${encodeURIComponent(organizerFirstName)}`
+    : `${APP_URL}/register/${event.event_code.trim()}`
 
   const tabItems = [
     { key: 'participants', label: 'Participants' },

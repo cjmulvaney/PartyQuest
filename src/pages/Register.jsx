@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { selectMissionsForParticipant } from '../lib/missions.js'
 import { normalizePhone } from '../lib/phone.js'
@@ -7,6 +7,8 @@ import { normalizePhone } from '../lib/phone.js'
 export default function Register() {
   const { eventCode } = useParams()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const fromName = searchParams.get('from')
   const [event, setEvent] = useState(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -418,6 +420,14 @@ export default function Register() {
           >
             Party Quest
           </h1>
+          {fromName && (
+            <p
+              className="mt-2"
+              style={{ fontSize: '0.9375rem', color: 'var(--color-text-secondary)', fontFamily: 'var(--font-body)' }}
+            >
+              {fromName} invited you to play!
+            </p>
+          )}
         </div>
 
         {/* Event info card */}
@@ -433,7 +443,7 @@ export default function Register() {
           >
             {event.name}
           </h2>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
             <span
               className="pq-badge pq-badge-primary"
               style={{ textTransform: 'capitalize' }}
@@ -444,6 +454,9 @@ export default function Register() {
               {eventDate}
             </span>
           </div>
+          <p style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', fontFamily: 'var(--font-body)', lineHeight: 1.5 }}>
+            You'll get a set of secret social missions to complete during the event — pull them off, earn points, and see where you land on the leaderboard.
+          </p>
         </div>
 
         {/* Registration form card */}
