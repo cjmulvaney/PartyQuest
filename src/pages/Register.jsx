@@ -77,8 +77,16 @@ export default function Register() {
       return
     }
 
-    // If no phone number, show warning first
+    const trimmedPhone = phone.trim()
     const normalizedPhone = normalizePhone(phone)
+
+    // Non-empty but unparseable — distinguish "invalid" from "empty"
+    if (trimmedPhone && !normalizedPhone) {
+      setError("That doesn't look like a valid phone number. Try a 10-digit US number, e.g. (555) 123-4567.")
+      return
+    }
+
+    // Truly empty — show the "you'll need to get code from organizer" warning
     if (!normalizedPhone && !showPhoneWarning) {
       setShowPhoneWarning(true)
       return
