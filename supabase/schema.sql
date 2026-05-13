@@ -1,5 +1,5 @@
 -- Party Quest — Canonical Database Schema
--- Snapshot taken 2026-04-17 AFTER v3.4-missions-v2.
+-- Snapshot taken 2026-05-13 AFTER v3.5-organizer-users-view.
 -- Reflects the live state of the Supabase project (ynffsjqnwhvyzrerbxor).
 --
 -- This file IS the current source of truth. Running it against an empty

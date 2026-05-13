@@ -21,6 +21,11 @@ Historical migration SQL files. **All of these have already been applied to the 
 | `v2.10-post-event-survey.sql` | `event_surveys` table + `rpc_submit_survey` |
 | `v3.0-admin-rls.sql` | `admin_emails` table + admin RLS policies |
 | `v3.1-cleanup.sql` | Security/perf cleanup: `search_path`, `(select auth.uid())` wrapping, duplicate-policy removal, missing FK indexes, `sms_reminders` RLS enable |
+| `v3.2-policy-tightening.sql` | Tighten INSERT policies on `completion_reactions`, `completion_comments`, `feedback`; add `is_active_participant()` + `rpc_remove_reaction()` |
+| `v3.3-allocation-mode.sql` | Add `event_config.allocation_mode` column (default `balanced`) |
+| `v3.4-missions-v2.sql` | Mission pack v2 (100+ missions, new categories incl. Group Activation) |
+| `v3.5-organizer-users-view.sql` | `rpc_get_organizer_users()` for the admin Users page |
+| `v3.6-lock-organizer-users-rpc.sql` | Revoke `rpc_get_organizer_users` EXECUTE from PUBLIC/anon; grant only to `authenticated` |
 
 ## Workflow for new migrations
 
