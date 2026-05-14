@@ -86,15 +86,16 @@ serve(async (req) => {
       || organizer?.user?.email?.split('@')[0]
       || 'Your host'
 
-    // Query participants with phone numbers — always skip already-sent for idempotency
-    // This ensures retries never double-send to participants who already received SMS
+    // Reminder uses reminder_sent_at so participants who already got a registration
+    // confirmation (sms_sent_at set) still receive the 15-minute heads-up.
+    const sentAtField = scenario === 'reminder' ? 'reminder_sent_at' : 'sms_sent_at'
     const { data: participants } = await supabase
       .from('participants')
-      .select('id, name, access_code, phone, sms_sent_at')
+      .select('id, name, access_code, phone, sms_sent_at, reminder_sent_at')
       .eq('event_id', eventId)
       .eq('is_active', true)
       .not('phone', 'is', null)
-      .is('sms_sent_at', null)
+      .is(sentAtField, null)
 
     if (!participants || participants.length === 0) {
       return new Response(JSON.stringify({ ok: true, sent: 0, failed: 0 }), {
@@ -156,7 +157,7 @@ serve(async (req) => {
             // Mark as sent ONLY after Twilio confirms delivery
             await supabase
               .from('participants')
-              .update({ sms_sent_at: new Date().toISOString() })
+              .update({ [sentAtField]: new Date().toISOString() })
               .eq('id', p.id)
             return { status: 'sent' }
           } else {

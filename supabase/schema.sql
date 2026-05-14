@@ -93,6 +93,7 @@ create table participants (
   source           text default 'manual' check (source in ('manual','self')),  -- v2.1
   phone            text,                                               -- v2.1 (optional)
   sms_sent_at      timestamptz,                                        -- v2.7: idempotency for outbound SMS
+  reminder_sent_at timestamptz,                                        -- v3.8: idempotency for 15-min reminder (separate from registration SMS)
   survey_submitted boolean default false                               -- v2.10
 );
 
@@ -556,16 +557,24 @@ end;
 $$;
 -- intentionally no anon/authenticated grant — service-role only.
 
--- v2.7: trigger body — on event activation, queue a reminder 15m before start
+-- v3.8: trigger body — on event create or start_time change, queue a reminder 15m before start
 create or replace function public.schedule_sms_reminder()
 returns trigger
 language plpgsql
 set search_path = public
 as $$
 begin
-  if new.status = 'active' and old.status != 'active' then
-    insert into sms_reminders (event_id, send_at)
-    values (new.id, new.start_time - interval '15 minutes');
+  if tg_op = 'INSERT' then
+    if new.start_time is not null then
+      insert into sms_reminders (event_id, send_at)
+      values (new.id, new.start_time - interval '15 minutes');
+    end if;
+  elsif tg_op = 'UPDATE' then
+    if new.start_time is distinct from old.start_time and new.start_time is not null then
+      delete from sms_reminders where event_id = new.id and sent = false;
+      insert into sms_reminders (event_id, send_at)
+      values (new.id, new.start_time - interval '15 minutes');
+    end if;
   end if;
   return new;
 end;
@@ -576,8 +585,9 @@ $$;
 -- ============================================================
 
 drop trigger if exists on_event_activated on events;
-create trigger on_event_activated
-  after update on events
+drop trigger if exists on_event_scheduled on events;
+create trigger on_event_scheduled
+  after insert or update of start_time on events
   for each row execute function schedule_sms_reminder();
 
 -- ============================================================
@@ -781,8 +791,12 @@ create policy "Admins can read admin list"
 -- v3.5: Admin-only RPC for organizer sign-in registry
 -- ============================================================
 
-create or replace function public.rpc_get_organizer_users()
-returns table (
+-- Note: must DROP before recreating — CREATE OR REPLACE cannot change return types.
+-- auth.users.email is varchar(255), not text, so explicit casts are required.
+DROP FUNCTION IF EXISTS public.rpc_get_organizer_users();
+
+CREATE FUNCTION public.rpc_get_organizer_users()
+RETURNS TABLE (
   id               uuid,
   email            text,
   full_name        text,
@@ -790,29 +804,31 @@ returns table (
   created_at       timestamptz,
   last_sign_in_at  timestamptz
 )
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  if not public.is_admin() then
-    raise exception 'Unauthorized' using errcode = '42501';
-  end if;
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF NOT public.is_admin() THEN
+    RAISE EXCEPTION 'Unauthorized' USING ERRCODE = '42501';
+  END IF;
 
-  return query
-  select
-    u.id,
-    u.email,
+  RETURN QUERY
+  SELECT
+    u.id::uuid,
+    u.email::text,
     (u.raw_user_meta_data->>'full_name')::text,
     (u.raw_user_meta_data->>'avatar_url')::text,
-    u.created_at,
-    u.last_sign_in_at
-  from auth.users u
-  order by u.created_at desc;
-end;
+    u.created_at::timestamptz,
+    u.last_sign_in_at::timestamptz
+  FROM auth.users u
+  ORDER BY u.created_at DESC;
+END;
 $$;
 
-grant execute on function public.rpc_get_organizer_users() to authenticated;
+REVOKE EXECUTE ON FUNCTION public.rpc_get_organizer_users() FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.rpc_get_organizer_users() FROM anon;
+GRANT  EXECUTE ON FUNCTION public.rpc_get_organizer_users() TO authenticated;
 
 -- ============================================================
 -- BOOTSTRAP REMINDERS
