@@ -106,7 +106,8 @@ create table participant_missions (
   notes                 text,
   photo_url             text,
   completed_at          timestamptz,
-  unlock_time           timestamptz
+  unlock_time           timestamptz,
+  retracted_at          timestamptz                                        -- v3.6: set when participant undoes a completion
 );
 
 -- Feedback (free-form text during/after events)
@@ -401,7 +402,7 @@ $$;
 
 grant execute on function public.rpc_join_event(text, text) to anon, authenticated;
 
--- v2.6: mark a mission complete
+-- v2.6 (updated v3.6): mark a mission complete; clears any prior retraction
 create or replace function public.rpc_complete_mission(
   p_access_code text,
   p_mission_id  uuid,
@@ -439,7 +440,8 @@ begin
     set completed    = true,
         notes        = coalesce(p_notes, notes),
         photo_url    = coalesce(p_photo_url, photo_url),
-        completed_at = now()
+        completed_at = now(),
+        retracted_at = null
     where id = v_pm.id;
 
   return jsonb_build_object('id', v_pm.id, 'completed', true, 'completed_at', now());
@@ -447,6 +449,54 @@ end;
 $$;
 
 grant execute on function public.rpc_complete_mission(text, uuid, text, text) to anon, authenticated;
+
+-- v3.6: undo a mission completion; sets retracted_at for the feed
+create or replace function public.rpc_uncomplete_mission(
+  p_access_code text,
+  p_mission_id  uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_participant record;
+  v_pm          record;
+begin
+  select * into v_participant
+    from participants
+    where access_code = upper(trim(p_access_code))
+      and is_active = true;
+
+  if v_participant is null then
+    raise exception 'Participant not found';
+  end if;
+
+  select * into v_pm
+    from participant_missions
+    where participant_id = v_participant.id
+      and mission_id = p_mission_id;
+
+  if v_pm is null then
+    raise exception 'Mission not assigned to this participant';
+  end if;
+
+  if not v_pm.completed then
+    raise exception 'Mission is not completed';
+  end if;
+
+  update participant_missions
+    set completed    = false,
+        completed_at = null,
+        retracted_at = now()
+    where id = v_pm.id;
+
+  return jsonb_build_object('id', v_pm.id, 'completed', false, 'retracted_at', now());
+end;
+$$;
+
+grant execute on function public.rpc_uncomplete_mission(text, uuid) to anon, authenticated;
 
 -- v3.2: access-code-gated reaction removal (replaces permissive DELETE policy)
 create or replace function public.rpc_remove_reaction(

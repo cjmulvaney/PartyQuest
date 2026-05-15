@@ -2,12 +2,11 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { getAvatarColor, getInitials } from '../lib/avatar.js'
 
-const REACTION_EMOJIS = ['\u{1F525}', '\u{1F44F}', '\u{1F60E}', '\u{1F389}', '\u{1F4AA}', '\u{2764}\uFE0F']
+const REACTION_EMOJIS = ['\u{1F525}', '\u{1F44F}', '\u{1F60E}', '\u{1F389}', '\u{1F4AA}', '\u{2764}️']
 
 function ReactionBar({ entryId, participantId, reactions, onToggleReaction }) {
   const [showPicker, setShowPicker] = useState(false)
 
-  // Group reactions by emoji
   const grouped = {}
   ;(reactions || []).forEach((r) => {
     if (!grouped[r.emoji]) grouped[r.emoji] = { count: 0, mine: false }
@@ -17,7 +16,6 @@ function ReactionBar({ entryId, participantId, reactions, onToggleReaction }) {
 
   return (
     <div className="flex items-center gap-1.5 flex-wrap mt-2">
-      {/* Existing reaction chips */}
       {Object.entries(grouped).map(([emoji, data]) => (
         <button
           key={emoji}
@@ -45,7 +43,6 @@ function ReactionBar({ entryId, participantId, reactions, onToggleReaction }) {
         </button>
       ))}
 
-      {/* Add reaction button */}
       <div style={{ position: 'relative' }}>
         <button
           onClick={() => setShowPicker((v) => !v)}
@@ -67,7 +64,6 @@ function ReactionBar({ entryId, participantId, reactions, onToggleReaction }) {
           +
         </button>
 
-        {/* Emoji picker popup */}
         {showPicker && (
           <div
             style={{
@@ -132,7 +128,6 @@ function CommentSection({ entryId, participantId, comments, participantMap, onAd
 
   return (
     <div className="mt-2">
-      {/* Toggle / count */}
       <button
         onClick={() => setExpanded((v) => !v)}
         style={{
@@ -152,44 +147,25 @@ function CommentSection({ entryId, participantId, comments, participantMap, onAd
           <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
         </svg>
         {commentCount > 0 ? `${commentCount} comment${commentCount !== 1 ? 's' : ''}` : 'Comment'}
-        {expanded ? ' \u25B4' : ' \u25BE'}
+        {expanded ? ' ▴' : ' ▾'}
       </button>
 
       {expanded && (
         <div
           className="mt-1.5"
-          style={{
-            borderLeft: '2px solid var(--color-border-light)',
-            paddingLeft: '10px',
-          }}
+          style={{ borderLeft: '2px solid var(--color-border-light)', paddingLeft: '10px' }}
         >
-          {/* Existing comments */}
           {entryComments.map((c) => (
             <div key={c.id} className="mb-1.5">
-              <span
-                style={{
-                  fontFamily: 'var(--font-heading)',
-                  fontSize: '0.75rem',
-                  fontWeight: 600,
-                  color: 'var(--color-text)',
-                }}
-              >
+              <span style={{ fontFamily: 'var(--font-heading)', fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-text)' }}>
                 {participantMap[c.participant_id] || 'Unknown'}
               </span>
-              <span
-                style={{
-                  fontFamily: 'var(--font-body)',
-                  fontSize: '0.75rem',
-                  color: 'var(--color-text-secondary)',
-                  marginLeft: '6px',
-                }}
-              >
+              <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.75rem', color: 'var(--color-text-secondary)', marginLeft: '6px' }}>
                 {c.text}
               </span>
             </div>
           ))}
 
-          {/* Add comment form */}
           {participantId && (
             <form onSubmit={handleSubmit} className="flex gap-1.5 mt-1">
               <input
@@ -255,8 +231,9 @@ function TimelineEntry({
 }) {
   const avatarColor = getAvatarColor(entry.participantName)
   const initials = getInitials(entry.participantName)
+  const isRetraction = entry.type === 'retracted'
 
-  const timeString = new Date(entry.completedAt).toLocaleTimeString('en-US', {
+  const timeString = new Date(entry.timestamp).toLocaleTimeString('en-US', {
     hour: 'numeric',
     minute: '2-digit',
   })
@@ -264,29 +241,19 @@ function TimelineEntry({
   return (
     <div
       className="flex gap-3"
-      style={{
-        animation: `feedSlideIn 0.35s ease-out ${index * 0.07}s both`,
-      }}
+      style={{ animation: `feedSlideIn 0.35s ease-out ${index * 0.07}s both` }}
     >
       {/* Timeline connector column */}
       <div className="flex flex-col items-center" style={{ width: '40px', flexShrink: 0 }}>
-        {/* Top connector line */}
         {!isFirst && (
-          <div
-            style={{
-              width: '2px',
-              height: '12px',
-              backgroundColor: 'var(--color-border)',
-            }}
-          />
+          <div style={{ width: '2px', height: '12px', backgroundColor: 'var(--color-border)' }} />
         )}
         {isFirst && <div style={{ height: '12px' }} />}
 
-        {/* Avatar node */}
         <div
           className="pq-avatar pq-avatar-sm"
           style={{
-            backgroundColor: avatarColor,
+            backgroundColor: isRetraction ? 'var(--color-border-strong)' : avatarColor,
             color: 'var(--color-text-inverse)',
             fontFamily: 'var(--font-heading)',
             fontWeight: 700,
@@ -302,116 +269,71 @@ function TimelineEntry({
           {initials}
         </div>
 
-        {/* Bottom connector line */}
         {!isLast && (
-          <div
-            style={{
-              width: '2px',
-              flex: 1,
-              backgroundColor: 'var(--color-border)',
-            }}
-          />
+          <div style={{ width: '2px', flex: 1, backgroundColor: 'var(--color-border)' }} />
         )}
       </div>
 
       {/* Entry content */}
-      <div
-        className="flex-1 pb-4"
-        style={{ minWidth: 0, paddingTop: '8px' }}
-      >
-        {/* Name and timestamp */}
+      <div className="flex-1 pb-4" style={{ minWidth: 0, paddingTop: '8px' }}>
         <div className="flex items-baseline gap-2 mb-1">
-          <span
-            style={{
-              fontFamily: 'var(--font-heading)',
-              fontWeight: 600,
-              fontSize: '0.9rem',
-              color: 'var(--color-text)',
-            }}
-          >
+          <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 600, fontSize: '0.9rem', color: 'var(--color-text)' }}>
             {entry.participantName}
           </span>
-          <span
-            style={{
-              fontFamily: 'var(--font-body)',
-              fontSize: '0.75rem',
-              color: 'var(--color-text-muted)',
-            }}
-          >
+          <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
             {timeString}
           </span>
         </div>
 
         {/* Action text */}
-        <p
-          style={{
-            fontFamily: 'var(--font-body)',
-            fontSize: '0.85rem',
-            color: 'var(--color-text-secondary)',
-            lineHeight: 1.5,
-          }}
-        >
-          {feedMode === 'transparent' ? (
-            <>
-              Completed{' '}
-              <span
-                style={{
-                  color: 'var(--color-primary)',
-                  fontWeight: 600,
-                }}
-              >
-                "{entry.missionText}"
-              </span>
-              {' '}and earned 1 point
-            </>
+        <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.85rem', color: isRetraction ? 'var(--color-text-muted)' : 'var(--color-text-secondary)', lineHeight: 1.5, fontStyle: isRetraction ? 'italic' : 'normal' }}>
+          {isRetraction ? (
+            feedMode === 'transparent' ? (
+              <>Retracted their completion of <span style={{ fontWeight: 600, color: 'var(--color-text-secondary)' }}>"{entry.missionText}"</span></>
+            ) : (
+              <>Retracted a mission completion</>
+            )
           ) : (
-            <>Completed a mission and earned 1 point</>
+            feedMode === 'transparent' ? (
+              <>
+                Completed{' '}
+                <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>
+                  "{entry.missionText}"
+                </span>
+                {' '}and earned 1 point
+              </>
+            ) : (
+              <>Completed a mission and earned 1 point</>
+            )
           )}
         </p>
 
-        {/* Comment/notes */}
-        {showComments && entry.notes && (
+        {/* Notes (completions only) */}
+        {!isRetraction && showComments && entry.notes && (
           <p
             className="mt-1"
-            style={{
-              fontFamily: 'var(--font-body)',
-              fontSize: '0.8rem',
-              color: 'var(--color-text-muted)',
-              fontStyle: 'italic',
-              lineHeight: 1.4,
-            }}
+            style={{ fontFamily: 'var(--font-body)', fontSize: '0.8rem', color: 'var(--color-text-muted)', fontStyle: 'italic', lineHeight: 1.4 }}
           >
             "{entry.notes}"
           </p>
         )}
 
-        {/* Photo */}
-        {showPhotos && entry.photoUrl && (
+        {/* Photo (completions only) */}
+        {!isRetraction && showPhotos && entry.photoUrl && (
           <div
             className="mt-2"
-            style={{
-              borderRadius: 'var(--radius-lg)',
-              overflow: 'hidden',
-              border: '1px solid var(--color-border-light)',
-              maxWidth: '280px',
-              boxShadow: 'var(--shadow-sm)',
-            }}
+            style={{ borderRadius: 'var(--radius-lg)', overflow: 'hidden', border: '1px solid var(--color-border-light)', maxWidth: '280px', boxShadow: 'var(--shadow-sm)' }}
           >
             <img
               src={entry.photoUrl}
               alt="Mission completion"
-              style={{
-                display: 'block',
-                width: '100%',
-                aspectRatio: '4 / 3',
-                objectFit: 'cover',
-              }}
+              style={{ display: 'block', width: '100%', aspectRatio: '4 / 3', objectFit: 'cover' }}
             />
           </div>
         )}
 
-        {/* Emoji reactions */}
-        {showReactions && (
+        {/* Reactions and comments (completions only) */}
+        {!isRetraction && showReactions && (
           <ReactionBar
             entryId={entry.id}
             participantId={participantId}
@@ -420,8 +342,7 @@ function TimelineEntry({
           />
         )}
 
-        {/* Interactive comments */}
-        {showInteractiveComments && (
+        {!isRetraction && showInteractiveComments && (
           <CommentSection
             entryId={entry.id}
             participantId={participantId}
@@ -453,7 +374,6 @@ export default function ActivityFeed({
   const channelRef = useRef(null)
 
   const loadFeed = useCallback(async () => {
-    // Get all participants for this event
     const { data: participants } = await supabase
       .from('participants')
       .select('id, name')
@@ -470,46 +390,70 @@ export default function ActivityFeed({
     setParticipantMap(pMap)
     const pIds = participants.map((p) => p.id)
 
-    // Get completed missions
-    const { data: completions } = await supabase
-      .from('participant_missions')
-      .select('id, participant_id, completed_at, photo_url, notes, missions(text)')
-      .eq('completed', true)
-      .in('participant_id', pIds)
-      .order('completed_at', { ascending: false })
-      .limit(50)
+    // Fetch completions and retractions in parallel
+    const [{ data: completions }, { data: retractions }] = await Promise.all([
+      supabase
+        .from('participant_missions')
+        .select('id, participant_id, completed_at, photo_url, notes, missions(text)')
+        .eq('completed', true)
+        .in('participant_id', pIds)
+        .limit(40),
+      supabase
+        .from('participant_missions')
+        .select('id, participant_id, retracted_at, missions(text)')
+        .not('retracted_at', 'is', null)
+        .in('participant_id', pIds)
+        .limit(20),
+    ])
 
-    if (completions) {
-      const feedEntries = completions
-        .filter((c) => c.completed_at)
-        .map((c) => ({
-          id: c.id,
-          participantName: pMap[c.participant_id] || 'Unknown',
-          missionText: c.missions?.text || '',
-          completedAt: c.completed_at,
-          photoUrl: c.photo_url,
-          notes: c.notes,
-        }))
-      setEntries(feedEntries)
+    const feedEntries = []
 
-      // Load reactions and comments for these entries
-      const pmIds = feedEntries.map((e) => e.id)
-      if (pmIds.length > 0) {
-        if (showReactions) {
-          const { data: rxns } = await supabase
-            .from('completion_reactions')
-            .select('id, participant_mission_id, participant_id, emoji')
-            .in('participant_mission_id', pmIds)
-          setReactions(rxns || [])
-        }
-        if (showInteractiveComments) {
-          const { data: cmts } = await supabase
-            .from('completion_comments')
-            .select('id, participant_mission_id, participant_id, text, created_at')
-            .in('participant_mission_id', pmIds)
-            .order('created_at', { ascending: true })
-          setComments(cmts || [])
-        }
+    ;(completions || []).filter((c) => c.completed_at).forEach((c) => {
+      feedEntries.push({
+        id: c.id,
+        type: 'completed',
+        participantName: pMap[c.participant_id] || 'Unknown',
+        missionText: c.missions?.text || '',
+        timestamp: c.completed_at,
+        photoUrl: c.photo_url,
+        notes: c.notes,
+      })
+    })
+
+    ;(retractions || []).forEach((r) => {
+      feedEntries.push({
+        id: `${r.id}-retracted`,
+        pmId: r.id,
+        type: 'retracted',
+        participantName: pMap[r.participant_id] || 'Unknown',
+        missionText: r.missions?.text || '',
+        timestamp: r.retracted_at,
+        photoUrl: null,
+        notes: null,
+      })
+    })
+
+    feedEntries.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+    feedEntries.splice(50)
+    setEntries(feedEntries)
+
+    // Load reactions and comments for completion entries
+    const completionIds = feedEntries.filter((e) => e.type === 'completed').map((e) => e.id)
+    if (completionIds.length > 0) {
+      if (showReactions) {
+        const { data: rxns } = await supabase
+          .from('completion_reactions')
+          .select('id, participant_mission_id, participant_id, emoji')
+          .in('participant_mission_id', completionIds)
+        setReactions(rxns || [])
+      }
+      if (showInteractiveComments) {
+        const { data: cmts } = await supabase
+          .from('completion_comments')
+          .select('id, participant_mission_id, participant_id, text, created_at')
+          .in('participant_mission_id', completionIds)
+          .order('created_at', { ascending: true })
+        setComments(cmts || [])
       }
     }
 
@@ -526,19 +470,16 @@ export default function ActivityFeed({
       .channel(`feed-${eventId}`)
       .on(
         'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'participant_missions',
-        },
+        { event: 'UPDATE', schema: 'public', table: 'participant_missions' },
         (payload) => {
-          if (payload.new?.completed && !payload.old?.completed) {
+          const newlyCompleted = payload.new?.completed && !payload.old?.completed
+          const newlyRetracted = payload.new?.retracted_at && !payload.old?.retracted_at
+          if (newlyCompleted || newlyRetracted) {
             loadFeed()
           }
         }
       )
 
-    // Listen for reaction changes
     if (showReactions) {
       channel.on(
         'postgres_changes',
@@ -547,7 +488,6 @@ export default function ActivityFeed({
       )
     }
 
-    // Listen for new comments
     if (showInteractiveComments) {
       channel.on(
         'postgres_changes',
@@ -566,7 +506,6 @@ export default function ActivityFeed({
     }
   }, [eventId, loadFeed, showReactions, showInteractiveComments])
 
-  // Toggle an emoji reaction
   const handleToggleReaction = useCallback(
     async (participantMissionId, emoji, alreadyReacted) => {
       if (!participantId) return
@@ -577,7 +516,6 @@ export default function ActivityFeed({
             r.participant_id === participantId &&
             r.emoji === emoji
         )
-        // Optimistic remove
         setReactions((prev) =>
           prev.filter(
             (r) =>
@@ -592,20 +530,17 @@ export default function ActivityFeed({
           })
         }
       } else {
-        // Optimistic add with temp id
         const tempReaction = { id: `temp-${Date.now()}`, participant_mission_id: participantMissionId, participant_id: participantId, emoji }
         setReactions((prev) => [...prev, tempReaction])
         await supabase
           .from('completion_reactions')
           .insert({ participant_mission_id: participantMissionId, participant_id: participantId, emoji })
       }
-      // Reload to sync with DB
       loadFeed()
     },
     [participantId, accessCode, reactions, loadFeed]
   )
 
-  // Add a comment
   const handleAddComment = useCallback(
     async (participantMissionId, text) => {
       if (!participantId) return
@@ -632,13 +567,7 @@ export default function ActivityFeed({
   if (entries.length === 0) {
     return (
       <div className="text-center py-8">
-        <p
-          style={{
-            fontFamily: 'var(--font-body)',
-            color: 'var(--color-text-muted)',
-            fontSize: '0.9rem',
-          }}
-        >
+        <p style={{ fontFamily: 'var(--font-body)', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
           No activity yet. Completions will appear here in real time.
         </p>
       </div>
@@ -647,38 +576,20 @@ export default function ActivityFeed({
 
   return (
     <div>
-      {/* Keyframe animation for new entries */}
       <style>{`
         @keyframes feedSlideIn {
-          from {
-            opacity: 0;
-            transform: translateX(-8px);
-          }
-          to {
-            opacity: 1;
-            transform: translateX(0);
-          }
+          from { opacity: 0; transform: translateX(-8px); }
+          to { opacity: 1; transform: translateX(0); }
         }
       `}</style>
 
-      {/* Header */}
       <h3
-        style={{
-          fontFamily: 'var(--font-heading)',
-          fontWeight: 700,
-          fontSize: '1.15rem',
-          color: 'var(--color-text)',
-          marginBottom: '0.75rem',
-        }}
+        style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: '1.15rem', color: 'var(--color-text)', marginBottom: '0.75rem' }}
       >
         Activity Feed
       </h3>
 
-      {/* Timeline */}
-      <div
-        className="pq-card"
-        style={{ padding: '0.75rem 0.75rem 0.25rem' }}
-      >
+      <div className="pq-card" style={{ padding: '0.75rem 0.75rem 0.25rem' }}>
         {entries.map((entry, i) => (
           <TimelineEntry
             key={entry.id}

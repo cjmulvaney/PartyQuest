@@ -160,9 +160,8 @@ export default function Play() {
     }
   }, [missions, loadData])
 
-  async function handleMissionSave(id, completed, notes, photoUrl) {
+  async function handleMissionComplete(id, notes, photoUrl) {
     const prev = missions.find(m => m.id === id)
-    const justCompleted = completed && !prev?.completed
 
     const { error } = await supabase.rpc('rpc_complete_mission', {
       p_access_code: accessCode,
@@ -178,12 +177,29 @@ export default function Play() {
       return
     }
 
-    if (justCompleted) {
-      fireConfetti()
-      setToast('Mission complete!')
+    fireConfetti()
+    setToast('Mission complete!')
+    setTimeout(() => setToast(''), 3000)
+    loadData()
+  }
+
+  async function handleMissionUncomplete(id) {
+    const prev = missions.find(m => m.id === id)
+
+    const { error } = await supabase.rpc('rpc_uncomplete_mission', {
+      p_access_code: accessCode,
+      p_mission_id: prev.mission_id,
+    })
+
+    if (error) {
+      console.error('Mission uncomplete failed:', error)
+      setToast('Error updating mission. Please try again.')
       setTimeout(() => setToast(''), 3000)
+      return
     }
 
+    setToast('Completion undone.')
+    setTimeout(() => setToast(''), 3000)
     loadData()
   }
 
@@ -359,19 +375,32 @@ export default function Play() {
                     No missions assigned yet. Check back soon!
                   </p>
                 )}
-                {missions.map((pm) => {
-                  const isLocked = pm.unlock_time && new Date(pm.unlock_time) > now
-                  if (isLocked) {
-                    return <LockedMission key={pm.id} unlockTime={pm.unlock_time} />
-                  }
-                  return (
-                    <MissionCard
-                      key={pm.id}
-                      mission={pm}
-                      onSave={handleMissionSave}
-                    />
-                  )
-                })}
+                {[...missions]
+                  .sort((a, b) => {
+                    const aLocked = a.unlock_time && new Date(a.unlock_time) > now
+                    const bLocked = b.unlock_time && new Date(b.unlock_time) > now
+                    if (aLocked && !bLocked) return 1
+                    if (!aLocked && bLocked) return -1
+                    if (!aLocked && !bLocked) {
+                      if (a.completed && !b.completed) return 1
+                      if (!a.completed && b.completed) return -1
+                    }
+                    return 0
+                  })
+                  .map((pm) => {
+                    const isLocked = pm.unlock_time && new Date(pm.unlock_time) > now
+                    if (isLocked) {
+                      return <LockedMission key={pm.id} unlockTime={pm.unlock_time} />
+                    }
+                    return (
+                      <MissionCard
+                        key={pm.id}
+                        mission={pm}
+                        onComplete={handleMissionComplete}
+                        onUncomplete={handleMissionUncomplete}
+                      />
+                    )
+                  })}
               </>
             )}
           </div>
