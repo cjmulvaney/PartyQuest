@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase.js'
 import { useAuth } from '../../hooks/useAuth.js'
@@ -1566,7 +1566,7 @@ export default function EventDetail() {
               <div>
                 {/* Table header */}
                 <div
-                  className="grid grid-cols-12 px-5 py-2.5 items-center"
+                  className="hidden sm:grid grid-cols-12 px-5 py-2.5 items-center"
                   style={{
                     fontSize: '0.6875rem',
                     fontWeight: 600,
@@ -1589,16 +1589,17 @@ export default function EventDetail() {
                 {activeParticipants.map((p, idx) => {
                   const isEditing = editingParticipantId === p.id
                   return (
-                  <div
-                    key={p.id}
-                    className="grid grid-cols-12 px-5 py-3 items-center"
-                    style={{
-                      borderBottom: '1px solid var(--color-border-light)',
-                      transition: 'var(--transition-fast)',
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = 'var(--color-surface-hover)'}
-                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                  >
+                  <React.Fragment key={p.id}>
+                    {/* Desktop row */}
+                    <div
+                      className="hidden sm:grid grid-cols-12 px-5 py-3 items-center"
+                      style={{
+                        borderBottom: '1px solid var(--color-border-light)',
+                        transition: 'var(--transition-fast)',
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = 'var(--color-surface-hover)'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                    >
                     <div className="col-span-3 flex items-center gap-3">
                       <div
                         className="pq-avatar pq-avatar-sm"
@@ -1751,7 +1752,127 @@ export default function EventDetail() {
                         </>
                       )}
                     </div>
-                  </div>
+                    </div>
+
+                    {/* Mobile card */}
+                    <div
+                      className="sm:hidden px-4 py-3"
+                      style={{ borderBottom: '1px solid var(--color-border-light)' }}
+                    >
+                      {isEditing ? (
+                        <div className="flex flex-col gap-2">
+                          <div className="flex items-center gap-2">
+                            <div className="pq-avatar pq-avatar-sm" style={{ background: getAvatarColor(p.name) }}>
+                              {getInitials(p.name)}
+                            </div>
+                            <input
+                              type="text"
+                              value={editName}
+                              onChange={(e) => setEditName(e.target.value)}
+                              className="pq-input flex-1"
+                              style={{ fontSize: '0.875rem', padding: '0.375rem 0.5rem' }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') saveEditParticipant(p.id)
+                                if (e.key === 'Escape') cancelEditParticipant()
+                              }}
+                              autoFocus
+                            />
+                          </div>
+                          <input
+                            type="tel"
+                            value={editPhone}
+                            onChange={(e) => setEditPhone(e.target.value)}
+                            className="pq-input"
+                            style={{ fontSize: '0.875rem', padding: '0.375rem 0.5rem', width: '100%' }}
+                            placeholder="Phone (optional)"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') saveEditParticipant(p.id)
+                              if (e.key === 'Escape') cancelEditParticipant()
+                            }}
+                          />
+                          <div className="flex gap-2 justify-end">
+                            <button
+                              onClick={cancelEditParticipant}
+                              disabled={savingEdit}
+                              className="pq-btn pq-btn-ghost"
+                              style={{ color: 'var(--color-text-muted)', padding: '0.25rem 0.75rem', fontSize: '0.875rem' }}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={() => saveEditParticipant(p.id)}
+                              disabled={savingEdit}
+                              className="pq-btn pq-btn-ghost"
+                              style={{ color: 'var(--color-success)', padding: '0.25rem 0.75rem', fontSize: '0.875rem', fontWeight: 600 }}
+                            >
+                              {savingEdit ? '...' : 'Save'}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          {/* Row 1: avatar + name + actions */}
+                          <div className="flex items-center gap-2.5 mb-2">
+                            <div className="pq-avatar pq-avatar-sm" style={{ background: getAvatarColor(p.name) }}>
+                              {getInitials(p.name)}
+                            </div>
+                            <span style={{ color: 'var(--color-text)', fontSize: '0.9375rem', fontWeight: 600, fontFamily: 'var(--font-body)' }}>
+                              <span style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', marginRight: '0.25rem' }}>
+                                {idx + 1}.
+                              </span>
+                              {p.name}
+                            </span>
+                            <div className="ml-auto flex items-center gap-0.5">
+                              {isUpcoming && (
+                                <button
+                                  onClick={() => startEditParticipant(p)}
+                                  className="pq-btn pq-btn-ghost"
+                                  style={{ color: 'var(--color-text-muted)', padding: '0.25rem 0.5rem', fontSize: '1rem', lineHeight: 1 }}
+                                  title="Edit"
+                                >
+                                  ✎
+                                </button>
+                              )}
+                              {!isEnded && (
+                                <button
+                                  onClick={() => handleDeactivateParticipant(p.id)}
+                                  className="pq-btn pq-btn-ghost"
+                                  style={{ color: 'var(--color-text-muted)', padding: '0.25rem 0.5rem', fontSize: '1.125rem', lineHeight: 1 }}
+                                  title="Remove"
+                                >
+                                  &times;
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          {/* Row 2: access code + progress */}
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span style={{ fontFamily: 'monospace', fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)', letterSpacing: '0.08em' }}>
+                              {p.access_code}
+                            </span>
+                            <span style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', fontFamily: 'var(--font-body)' }}>
+                              {p.completed} / {p.total} missions
+                            </span>
+                          </div>
+                          {/* Row 3: phone + badges */}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-muted)', fontFamily: 'var(--font-body)' }}>
+                              {p.phone ? `***-${p.phone.slice(-4)}` : 'No phone'}
+                            </span>
+                            {p.sms_sent_at && (
+                              <span className="pq-badge pq-badge-success" style={{ fontSize: '0.625rem', padding: '0.125rem 0.375rem' }}>SMS</span>
+                            )}
+                            <span className={`pq-badge ${p.source === 'self' ? 'pq-badge-primary' : 'pq-badge-muted'}`}>
+                              {p.source === 'self' ? 'link' : 'added'}
+                            </span>
+                            {p.joined_at && (
+                              <span className="pq-badge pq-badge-success">joined</span>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </React.Fragment>
                   )
                 })}
               </div>
@@ -1760,7 +1881,7 @@ export default function EventDetail() {
             {/* Add participant inline */}
             {!isEnded && (
               <div className="px-5 py-4" style={{ borderTop: '1px solid var(--color-border-light)' }}>
-                <div className="flex items-center gap-3">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
                   <input
                     type="text"
                     value={newParticipantName}
@@ -1776,8 +1897,7 @@ export default function EventDetail() {
                     value={newParticipantPhone}
                     onChange={(e) => setNewParticipantPhone(e.target.value)}
                     placeholder="Phone (optional)"
-                    className="pq-input"
-                    style={{ width: '160px' }}
+                    className="pq-input sm:w-40"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') handleAddParticipant()
                     }}
