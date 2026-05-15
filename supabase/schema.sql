@@ -558,9 +558,12 @@ $$;
 -- intentionally no anon/authenticated grant — service-role only.
 
 -- v3.8: trigger body — on event create or start_time change, queue a reminder 15m before start
+-- security definer required: sms_reminders has RLS with no policies (service-role only),
+-- so the trigger must run as the function owner to bypass RLS.
 create or replace function public.schedule_sms_reminder()
 returns trigger
 language plpgsql
+security definer
 set search_path = public
 as $$
 begin

@@ -38,12 +38,19 @@ serve(async (req) => {
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, serviceRoleKey)
 
-    // Validate caller is the event organizer (for non-cron calls)
+    // Detect cron/service-role calls by inspecting the JWT role claim.
+    // The edge function gateway already verifies the signature, so we only need
+    // to check the payload. Service role JWTs have role: "service_role".
     const authHeader = req.headers.get('Authorization')
-    if (authHeader && !authHeader.includes(serviceRoleKey)) {
-      const { data: { user }, error: authError } = await supabase.auth.getUser(
-        authHeader.replace('Bearer ', '')
-      )
+    const token = authHeader?.replace('Bearer ', '') ?? ''
+    let isServiceRole = false
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]))
+      isServiceRole = payload.role === 'service_role'
+    } catch { /* not a JWT or malformed — treat as user request */ }
+
+    if (!isServiceRole) {
+      const { data: { user }, error: authError } = await supabase.auth.getUser(token)
 
       if (authError || !user) {
         return new Response(JSON.stringify({ ok: false, error: 'Unauthorized' }), {
