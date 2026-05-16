@@ -1566,7 +1566,7 @@ export default function EventDetail() {
               <div>
                 {/* Table header */}
                 <div
-                  className="hidden sm:grid grid-cols-12 px-5 py-2.5 items-center"
+                  className="hidden lg:grid grid-cols-12 px-5 py-2.5 items-center"
                   style={{
                     fontSize: '0.6875rem',
                     fontWeight: 600,
@@ -1592,7 +1592,7 @@ export default function EventDetail() {
                   <React.Fragment key={p.id}>
                     {/* Desktop row */}
                     <div
-                      className="hidden sm:grid grid-cols-12 px-5 py-3 items-center"
+                      className="hidden lg:grid grid-cols-12 px-5 py-3 items-center"
                       style={{
                         borderBottom: '1px solid var(--color-border-light)',
                         transition: 'var(--transition-fast)',
@@ -1756,7 +1756,7 @@ export default function EventDetail() {
 
                     {/* Mobile card */}
                     <div
-                      className="sm:hidden px-4 py-3"
+                      className="lg:hidden px-4 py-3"
                       style={{ borderBottom: '1px solid var(--color-border-light)' }}
                     >
                       {isEditing ? (
@@ -1881,7 +1881,7 @@ export default function EventDetail() {
             {/* Add participant inline */}
             {!isEnded && (
               <div className="px-5 py-4" style={{ borderTop: '1px solid var(--color-border-light)' }}>
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
+                <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-2 lg:gap-3">
                   <input
                     type="text"
                     value={newParticipantName}
@@ -1897,7 +1897,7 @@ export default function EventDetail() {
                     value={newParticipantPhone}
                     onChange={(e) => setNewParticipantPhone(e.target.value)}
                     placeholder="Phone (optional)"
-                    className="pq-input sm:w-40"
+                    className="pq-input lg:w-40"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') handleAddParticipant()
                     }}
