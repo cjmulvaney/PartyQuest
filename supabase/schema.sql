@@ -1,5 +1,5 @@
 -- Party Quest — Canonical Database Schema
--- Snapshot taken 2026-05-13 AFTER v3.5-organizer-users-view.
+-- Snapshot updated 2026-06-10 AFTER v3.9-participant-privacy-and-activation.
 -- Reflects the live state of the Supabase project (ynffsjqnwhvyzrerbxor).
 --
 -- This file IS the current source of truth. Running it against an empty
@@ -7,7 +7,7 @@
 --
 -- History of incremental migrations is preserved in ./archive/
 -- (phases 3/5, v2.1, v2.3, v2.4, v2.6, v2.7, v2.8, v2.9, v2.10,
---  v3.0, v3.1, v3.2, v3.3, v3.4).
+--  v3.0 through v3.9).
 --
 -- After a new migration is applied in prod, fold its DDL into this file
 -- and move the migration SQL into ./archive/.
@@ -610,6 +610,8 @@ $$;
 -- v3.8: trigger body — on event create or start_time change, queue a reminder 15m before start
 -- security definer required: sms_reminders has RLS with no policies (service-role only),
 -- so the trigger must run as the function owner to bypass RLS.
+-- v3.9: skip past-due reminders (events created after their start time were
+-- getting a "starts in 15 minutes!" text after the event had started).
 create or replace function public.schedule_sms_reminder()
 returns trigger
 language plpgsql
@@ -618,15 +620,17 @@ set search_path = public
 as $$
 begin
   if tg_op = 'INSERT' then
-    if new.start_time is not null then
+    if new.start_time is not null and new.start_time > now() then
       insert into sms_reminders (event_id, send_at)
       values (new.id, new.start_time - interval '15 minutes');
     end if;
   elsif tg_op = 'UPDATE' then
     if new.start_time is distinct from old.start_time and new.start_time is not null then
       delete from sms_reminders where event_id = new.id and sent = false;
-      insert into sms_reminders (event_id, send_at)
-      values (new.id, new.start_time - interval '15 minutes');
+      if new.start_time > now() then
+        insert into sms_reminders (event_id, send_at)
+        values (new.id, new.start_time - interval '15 minutes');
+      end if;
     end if;
   end if;
   return new;
@@ -688,8 +692,11 @@ create policy "Admins can delete missions"
   on missions for delete using (is_admin());
 
 -- ─── events ────────────────────────────────────────────────────
-create policy "Events are readable by anyone"
-  on events for select using (true);
+-- v3.9: base table is organizer/admin-only; anon reads go through events_public
+create policy "Organizers and admins can read events"
+  on events for select using (
+    is_admin() or organizer_id = (select auth.uid())
+  );
 
 create policy "Organizers can insert their own events"
   on events for insert with check ((select auth.uid()) = organizer_id);
@@ -732,8 +739,16 @@ create policy "Organizers can delete event config"
   );
 
 -- ─── participants ──────────────────────────────────────────────
-create policy "Participants are publicly readable"
-  on participants for select using (true);
+-- v3.9: phones + access codes must never be anon-readable; participant-facing
+-- reads use participants_public or rpc_get_participant_by_access_code
+create policy "Organizers and admins can read participants"
+  on participants for select using (
+    is_admin() or exists (
+      select 1 from events
+      where events.id = participants.event_id
+        and events.organizer_id = (select auth.uid())
+    )
+  );
 
 create policy "Organizers can insert participants"
   on participants for insert with check (
@@ -769,6 +784,17 @@ create policy "Organizers can insert participant missions"
 
 create policy "Organizers can update participant missions"
   on participant_missions for update using (
+    exists (
+      select 1 from participants
+      join events on events.id = participants.event_id
+      where participants.id = participant_missions.participant_id
+        and events.organizer_id = (select auth.uid())
+    )
+  );
+
+-- v3.9: mission editor diff-save deletes rows trimmed during rebalance
+create policy "Organizers can delete participant missions"
+  on participant_missions for delete using (
     exists (
       select 1 from participants
       join events on events.id = participants.event_id
@@ -884,6 +910,55 @@ REVOKE EXECUTE ON FUNCTION public.rpc_get_organizer_users() FROM anon;
 GRANT  EXECUTE ON FUNCTION public.rpc_get_organizer_users() TO authenticated;
 
 -- ============================================================
+-- v3.9: Participant privacy — public views + access-code RPC
+-- ============================================================
+-- The participants/events base tables are organizer/admin-only (see RLS
+-- above). Participant-facing pages read these views instead, which expose
+-- only safe columns. Owned by postgres -> bypass RLS by design.
+
+create view public.participants_public as
+  select id, event_id, name, is_active, joined_at from participants;
+grant select on public.participants_public to anon, authenticated;
+
+create view public.events_public as
+  select id, name, event_type, start_time, end_time, event_code, status,
+         anonymity_enabled, feed_mode, max_participants,
+         feed_photos_enabled, feed_comments_enabled, feed_reactions_enabled,
+         feed_interactive_comments_enabled, feed_hidden
+  from events;
+grant select on public.events_public to anon, authenticated;
+
+-- Access-code lookup for Play/Feedback (replaces direct anon selects)
+create or replace function public.rpc_get_participant_by_access_code(p_access_code text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare v record;
+begin
+  select id, name, event_id, survey_submitted into v
+    from participants
+    where access_code = upper(trim(p_access_code)) and is_active = true;
+  if v is null then
+    raise exception 'Participant not found';
+  end if;
+  return jsonb_build_object(
+    'id', v.id,
+    'name', v.name,
+    'event_id', v.event_id,
+    'survey_submitted', v.survey_submitted
+  );
+end;
+$$;
+grant execute on function public.rpc_get_participant_by_access_code(text) to anon, authenticated;
+
+-- Known accepted tradeoff (documented, not fixed): participant_missions
+-- remains publicly readable, and rpc_assign_participant_missions /
+-- rpc_submit_survey accept any participant id from anon (needed by the
+-- self-registration flow). Low stakes for a party game; revisit if abused.
+
+-- ============================================================
 -- BOOTSTRAP REMINDERS
 -- ============================================================
 -- After running this file, insert at least one admin email so is_admin() works:
@@ -907,3 +982,9 @@ GRANT  EXECUTE ON FUNCTION public.rpc_get_organizer_users() TO authenticated;
 --     FROM sms_reminders
 --     WHERE sent = false AND send_at <= now();
 --   $cmd$);
+--
+-- v3.9: schedule the event auto-activation job (runs every minute):
+--   SELECT cron.schedule('event-auto-activate', '* * * * *', $$
+--     update events set status = 'active'
+--     where status = 'upcoming' and start_time <= now();
+--   $$);
