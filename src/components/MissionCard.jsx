@@ -7,6 +7,7 @@ export default function MissionCard({ mission, onComplete, onUncomplete }) {
   const [notes, setNotes] = useState(mission.notes || '')
   const [photoUrl, setPhotoUrl] = useState(mission.photo_url || '')
   const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState('')
   const [saving, setSaving] = useState(false)
   const [collapsing, setCollapsing] = useState(false)
   const fileInputRef = useRef(null)
@@ -14,7 +15,7 @@ export default function MissionCard({ mission, onComplete, onUncomplete }) {
   const [showPhotoOptions, setShowPhotoOptions] = useState(false)
 
   const missionText = mission.missions?.text
-  const category = mission.missions?.category
+  const category = mission.missions?.categories?.name
 
   function handleCardTap() {
     if (expanded) return
@@ -36,15 +37,16 @@ export default function MissionCard({ mission, onComplete, onUncomplete }) {
     if (!file) return
 
     setUploading(true)
+    setUploadError('')
     try {
-      const fileExt = file.name.split('.').pop()
+      const fileExt = file.name.includes('.') ? file.name.split('.').pop() : 'jpg'
       const fileName = `${mission.id}-${Date.now()}.${fileExt}`
 
-      const { error: uploadError } = await supabase.storage
+      const { error: storageError } = await supabase.storage
         .from('photos')
         .upload(fileName, file, { upsert: true })
 
-      if (uploadError) throw uploadError
+      if (storageError) throw storageError
 
       const { data } = supabase.storage
         .from('photos')
@@ -53,6 +55,10 @@ export default function MissionCard({ mission, onComplete, onUncomplete }) {
       setPhotoUrl(data.publicUrl)
     } catch (err) {
       console.error('Photo upload failed:', err)
+      setUploadError('Upload failed — try again.')
+      // Allow re-selecting the same file
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      if (cameraInputRef.current) cameraInputRef.current.value = ''
     } finally {
       setUploading(false)
     }
@@ -431,6 +437,19 @@ export default function MissionCard({ mission, onComplete, onUncomplete }) {
                     </>
                   )}
                 </button>
+
+                {uploadError && (
+                  <p
+                    style={{
+                      fontSize: 13,
+                      color: 'var(--color-danger)',
+                      fontFamily: 'var(--font-body)',
+                      marginTop: 6,
+                    }}
+                  >
+                    {uploadError}
+                  </p>
+                )}
 
                 {showPhotoOptions && (
                   <>

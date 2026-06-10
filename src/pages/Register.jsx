@@ -41,7 +41,7 @@ export default function Register() {
     async function loadEvent() {
       const code = eventCode.toUpperCase().trim()
       const { data, error: err } = await supabase
-        .from('events')
+        .from('events_public')
         .select('id, name, event_type, start_time, end_time, status, max_participants')
         .eq('event_code', code)
         .single()
@@ -199,7 +199,7 @@ export default function Register() {
     // Get existing assignment counts across all participants in this event
     // so we can use leveled round-robin (least-assigned missions first)
     const { data: allEventParticipants } = await supabase
-      .from('participants')
+      .from('participants_public')
       .select('id')
       .eq('event_id', event.id)
       .eq('is_active', true)

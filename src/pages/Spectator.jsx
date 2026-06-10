@@ -19,7 +19,7 @@ export default function Spectator() {
     setLoading(true)
 
     const { data, error: fetchError } = await supabase
-      .from('events')
+      .from('events_public')
       .select('id, name, anonymity_enabled, status, feed_mode, feed_photos_enabled, feed_comments_enabled, feed_reactions_enabled, feed_interactive_comments_enabled, feed_hidden')
       .eq('event_code', eventCode.toUpperCase().trim())
       .in('status', ['active', 'upcoming'])

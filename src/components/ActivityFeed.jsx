@@ -375,9 +375,10 @@ export default function ActivityFeed({
 
   const loadFeed = useCallback(async () => {
     const { data: participants } = await supabase
-      .from('participants')
+      .from('participants_public')
       .select('id, name')
       .eq('event_id', eventId)
+      .eq('is_active', true)
 
     if (!participants || participants.length === 0) {
       setEntries([])
@@ -397,12 +398,14 @@ export default function ActivityFeed({
         .select('id, participant_id, completed_at, photo_url, notes, missions(text)')
         .eq('completed', true)
         .in('participant_id', pIds)
+        .order('completed_at', { ascending: false })
         .limit(40),
       supabase
         .from('participant_missions')
         .select('id, participant_id, retracted_at, missions(text)')
         .not('retracted_at', 'is', null)
         .in('participant_id', pIds)
+        .order('retracted_at', { ascending: false })
         .limit(20),
     ])
 

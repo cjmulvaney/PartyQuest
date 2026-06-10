@@ -39,14 +39,11 @@ export default function Feedback() {
 
     // Try as access_code (participant-specific link from SMS)
     const { data: part } = await supabase
-      .from('participants')
-      .select('id, name, event_id, survey_submitted')
-      .eq('access_code', token.toUpperCase())
-      .maybeSingle()
+      .rpc('rpc_get_participant_by_access_code', { p_access_code: token })
 
     if (part) {
       const { data: evt } = await supabase
-        .from('events')
+        .from('events_public')
         .select('id, name, status')
         .eq('id', part.event_id)
         .single()
@@ -67,7 +64,7 @@ export default function Feedback() {
 
     // Try as event_code (in-room display URL / QR code)
     const { data: evt } = await supabase
-      .from('events')
+      .from('events_public')
       .select('id, name, status')
       .eq('event_code', token.toUpperCase())
       .maybeSingle()
@@ -86,13 +83,9 @@ export default function Feedback() {
     if (!accessCodeInput.trim()) return
 
     const { data: part } = await supabase
-      .from('participants')
-      .select('id, name, event_id, survey_submitted')
-      .eq('access_code', accessCodeInput.trim().toUpperCase())
-      .eq('event_id', event.id)
-      .maybeSingle()
+      .rpc('rpc_get_participant_by_access_code', { p_access_code: accessCodeInput })
 
-    if (!part) {
+    if (!part || part.event_id !== event.id) {
       setCodeError('Access code not found for this event. Check your code and try again.')
       return
     }

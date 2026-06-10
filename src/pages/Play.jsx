@@ -42,6 +42,7 @@ export default function Play() {
   const [reconnecting, setReconnecting] = useState(false)
   const unlockTimersRef = useRef([])
   const prevUnlockedRef = useRef(new Set())
+  const retryTimerRef = useRef(null)
 
   const CACHE_KEY = `pq_session_${accessCode}`
 
@@ -60,10 +61,7 @@ export default function Play() {
 
   const loadData = useCallback(async () => {
     const { data: part, error: partErr } = await supabase
-      .from('participants')
-      .select('id, name, event_id')
-      .eq('access_code', accessCode)
-      .single()
+      .rpc('rpc_get_participant_by_access_code', { p_access_code: accessCode })
 
     if (partErr || !part) {
       // Network failed or code not found — fall back to cache if available
@@ -75,7 +73,8 @@ export default function Play() {
         setReconnecting(true)
         setLoading(false)
         // Retry in 10 seconds
-        setTimeout(() => loadData(), 10000)
+        clearTimeout(retryTimerRef.current)
+        retryTimerRef.current = setTimeout(() => loadData(), 10000)
       } else {
         setError('Invalid access code.')
         setLoading(false)
@@ -84,7 +83,7 @@ export default function Play() {
     }
 
     const { data: evt } = await supabase
-      .from('events')
+      .from('events_public')
       .select('id, name, status, start_time, anonymity_enabled, feed_mode, feed_photos_enabled, feed_comments_enabled, feed_reactions_enabled, feed_interactive_comments_enabled, feed_hidden')
       .eq('id', part.event_id)
       .single()
@@ -119,6 +118,7 @@ export default function Play() {
       setLoading(false)
     }
     loadData()
+    return () => clearTimeout(retryTimerRef.current)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {

@@ -18,8 +18,10 @@ function PodiumPlayer({ entry, rank, anonymity, fullscreen }) {
   if (!entry) return <div className="flex-1" />
 
   const displayName = anonymity ? `Player ${rank + 1}` : entry.name
-  const avatarColor = getAvatarColor(entry.name)
-  const initials = getInitials(entry.name)
+  // Anonymity: real initials + a name-derived color would identify players
+  // at a party, so key both off rank/id instead
+  const avatarColor = getAvatarColor(anonymity ? entry.id : entry.name)
+  const initials = anonymity ? `P${rank + 1}` : getInitials(entry.name)
   const avatarSize = rank === 0 ? 'pq-avatar pq-avatar-lg' : 'pq-avatar pq-avatar-md'
   const medalColor = MEDAL_COLORS[rank]
 
@@ -111,8 +113,8 @@ function PodiumPlayer({ entry, rank, anonymity, fullscreen }) {
 
 function RankedEntry({ entry, rank, index, anonymity, fullscreen }) {
   const displayName = anonymity ? `Player ${rank}` : entry.name
-  const avatarColor = getAvatarColor(entry.name)
-  const initials = getInitials(entry.name)
+  const avatarColor = getAvatarColor(anonymity ? entry.id : entry.name)
+  const initials = anonymity ? `P${rank}` : getInitials(entry.name)
 
   return (
     <div
@@ -198,9 +200,10 @@ export default function Leaderboard({ eventId, anonymity = false, fullscreen = f
   const loadScores = useCallback(async () => {
     // Get all participants for this event
     const { data: participants } = await supabase
-      .from('participants')
+      .from('participants_public')
       .select('id, name')
       .eq('event_id', eventId)
+      .eq('is_active', true)
 
     if (!participants || participants.length === 0) {
       setScores([])

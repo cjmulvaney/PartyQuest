@@ -110,7 +110,8 @@ export default function CreateEvent() {
       end.setHours(23, 0, 0, 0)
       setEndTime(formatDateTimeLocal(end))
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps — intentional mount-only effect
+    // intentional mount-only effect
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Pre-fill organizer email from Google account
   useEffect(() => {
@@ -310,9 +311,11 @@ export default function CreateEvent() {
       if (selectedTags.length === 0)
         return 'Select at least one mission category.'
       if (unlockType === 'timed') {
-        const validTimes = unlockTimes.filter((t) => t.trim() !== '')
-        if (validTimes.length === 0)
-          return 'Set at least one unlock time.'
+        if (batches.some((b) => !b.time || b.time.trim() === ''))
+          return 'Set an unlock time for every batch.'
+        const batchTotal = batches.reduce((sum, b) => sum + (parseInt(b.count) || 0), 0)
+        if (batchTotal !== missionCount)
+          return `Your batches cover ${batchTotal} of ${missionCount} missions — adjust batch sizes to match.`
       }
     }
     return ''
@@ -345,13 +348,15 @@ export default function CreateEvent() {
     }
 
     // Filter out blank rows; normalize phone to E.164 (or null if empty/invalid).
+    // No access codes in edit mode: real codes already exist in the DB and
+    // are shown on the event page (regenerating here displayed fake ones).
     const participants = participantRows
       .map((r) => ({ name: r.name.trim(), rawPhone: r.phone.trim() }))
       .filter((r) => r.name.length > 0)
       .map((r) => ({
         name: r.name,
         phone: r.rawPhone ? normalizePhone(r.rawPhone) : null,
-        accessCode: generateCode(6),
+        accessCode: isEditMode ? null : generateCode(6),
         isNamed: true,
       }))
     setGeneratedParticipants(participants)
@@ -480,7 +485,7 @@ export default function CreateEvent() {
         if (generatedParticipants.length > 0) {
           const inserted = await Promise.all(
             generatedParticipants.map((p) =>
-              insertParticipantWithRetry(supabase, eventData.id, p.name, 'manual', 3, p.phone || null)
+              insertParticipantWithRetry(supabase, eventData.id, p.name, 'manual', 3, p.phone || null, p.accessCode)
             )
           )
           allParticipants = inserted
@@ -501,7 +506,7 @@ export default function CreateEvent() {
     setLaunching(false)
   }
 
-  async function assignMissionsToAll(participants, eventId) {
+  async function assignMissionsToAll(participants, _eventId) {
     // Get eligible missions — try with tag filter first, fallback to all.
     // Pull category_id so the balanced selector can avoid per-participant repeats.
     let missions = null
@@ -1748,9 +1753,20 @@ export default function CreateEvent() {
                   </p>
                 </div>
 
-                {/* Participant Codes */}
+                {/* Participant Codes — hidden in edit mode: codes here are
+                    regenerated locally and don't match the DB. The real ones
+                    live on the event page. */}
                 <div className="pq-card" style={{ padding: '1.5rem 2rem' }}>
-                  {generatedParticipants.length > 0 ? (
+                  {isEditMode ? (
+                    <div className="text-center py-4">
+                      <h3 style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, color: 'var(--color-text)', fontSize: '1rem', marginBottom: '0.5rem' }}>
+                        Access Codes
+                      </h3>
+                      <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
+                        Your guests&apos; access codes live on the event page — find them there after saving.
+                      </p>
+                    </div>
+                  ) : generatedParticipants.length > 0 ? (
                     <>
                       <div className="flex items-center justify-between mb-4">
                         <h3 style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, color: 'var(--color-text)', fontSize: '1rem' }}>
@@ -1917,8 +1933,11 @@ export default function CreateEvent() {
 
                           if (isLocked) {
                             // Locked mission card
-                            const unlockLabel = unlockTimes[i]
-                              ? new Date(unlockTimes[i]).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+                            const unlockSchedule = batches.flatMap((b) =>
+                              Array(parseInt(b.count) || 0).fill(b.time)
+                            )
+                            const unlockLabel = unlockSchedule[i]
+                              ? new Date(unlockSchedule[i]).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
                               : `Later`
                             return (
                               <div

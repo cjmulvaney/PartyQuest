@@ -105,6 +105,15 @@ serve(async (req) => {
       .is(sentAtField, null)
 
     if (!participants || participants.length === 0) {
+      // Still mark reminder rows sent — otherwise pg_cron re-fires this
+      // event every 5 minutes forever when no one has a phone number
+      if (scenario === 'reminder') {
+        await supabase
+          .from('sms_reminders')
+          .update({ sent: true })
+          .eq('event_id', eventId)
+          .eq('sent', false)
+      }
       return new Response(JSON.stringify({ ok: true, sent: 0, failed: 0 }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })

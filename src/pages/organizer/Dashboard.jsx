@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase.js'
 import { useAuth } from '../../hooks/useAuth.js'
 import { useTheme } from '../../hooks/useTheme.jsx'
-import { generateCode } from '../../lib/missions.js'
+import { cloneEvent } from '../../lib/cloneEvent.js'
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -19,20 +19,6 @@ export default function Dashboard() {
     () => !localStorage.getItem('pq_organizer_guide_dismissed')
   )
 
-  useEffect(() => {
-    if (authLoading) return
-    if (!user) {
-      if (sessionStorage.getItem('pq_signed_out')) {
-        navigate('/')
-        return
-      }
-      signInWithGoogle()
-      return
-    }
-    sessionStorage.removeItem('pq_signed_out')
-    loadEvents()
-  }, [user, authLoading])
-
   async function loadEvents() {
     setLoading(true)
 
@@ -45,18 +31,11 @@ export default function Dashboard() {
     if (data) {
       const eventIds = data.map((e) => e.id)
 
-      // Batch: get all participants + mission stats in two queries instead of N+1
-      const [{ data: allParticipants }, { data: allPMRaw }] = await Promise.all([
-        supabase
-          .from('participants')
-          .select('id, event_id')
-          .in('event_id', eventIds),
-        // We need participant IDs to query participant_missions
-        supabase
-          .from('participants')
-          .select('id, event_id')
-          .in('event_id', eventIds),
-      ])
+      // Batch: get all participants once, then mission stats per chunk
+      const { data: allParticipants } = await supabase
+        .from('participants')
+        .select('id, event_id')
+        .in('event_id', eventIds)
 
       const participantIds = (allParticipants || []).map((p) => p.id)
 
@@ -107,50 +86,26 @@ export default function Dashboard() {
     setLoading(false)
   }
 
+  useEffect(() => {
+    if (authLoading) return
+    if (!user) {
+      if (sessionStorage.getItem('pq_signed_out')) {
+        navigate('/')
+        return
+      }
+      signInWithGoogle()
+      return
+    }
+    sessionStorage.removeItem('pq_signed_out')
+    loadEvents()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, authLoading])
+
   async function handleClone(e, event) {
     e.stopPropagation()
     setCloning(event.id)
     try {
-      const now = new Date()
-      now.setHours(19, 0, 0, 0)
-      const end = new Date(now)
-      end.setHours(23, 0, 0, 0)
-
-      const code = generateCode(6)
-
-      // Get config from original event
-      const { data: origConfig } = await supabase
-        .from('event_config')
-        .select('*')
-        .eq('event_id', event.id)
-        .single()
-
-      const { data: newEvent, error: eventErr } = await supabase
-        .from('events')
-        .insert({
-          organizer_id: user.id,
-          name: `${event.name} (Copy)`,
-          event_type: event.event_type || 'house party',
-          start_time: now.toISOString(),
-          end_time: end.toISOString(),
-          event_code: code,
-          status: 'upcoming',
-        })
-        .select()
-        .single()
-
-      if (eventErr) throw eventErr
-
-      if (origConfig) {
-        await supabase.from('event_config').insert({
-          event_id: newEvent.id,
-          mission_count: origConfig.mission_count,
-          unlock_type: origConfig.unlock_type,
-          unlock_schedule: origConfig.unlock_schedule,
-          tag_filters: origConfig.tag_filters,
-        })
-      }
-
+      const newEvent = await cloneEvent(supabase, event.id, user.id)
       navigate(`/organizer/event/${newEvent.id}`)
     } catch (err) {
       console.error('Clone failed:', err)
@@ -532,8 +487,16 @@ function EventCard({ event, onClick, onClone, cloning = false, isPast = false, s
     : null
 
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onClick()
+        }
+      }}
       className={`pq-card pq-card-interactive w-full text-left animate-scale-in ${staggerClass}`}
       style={{
         cursor: 'pointer',
@@ -691,6 +654,6 @@ function EventCard({ event, onClick, onClone, cloning = false, isPast = false, s
           </div>
         </div>
       </div>
-    </button>
+    </div>
   )
 }

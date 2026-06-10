@@ -39,21 +39,10 @@ export default function EventsPage() {
     // Batch: get all participants for all events in one query
     const eventIds = data.map((e) => e.id)
 
-    const [{ data: allParticipants }, { data: allPM }] = await Promise.all([
-      supabase
-        .from('participants')
-        .select('id, event_id')
-        .in('event_id', eventIds),
-      supabase
-        .from('participant_missions')
-        .select('participant_id, completed')
-        .in(
-          'participant_id',
-          // We need participant IDs — but we can get them from participants query above
-          // Instead, do a join approach: get all participant_missions for these events
-          [] // placeholder, will use a different approach
-        ),
-    ])
+    const { data: allParticipants } = await supabase
+      .from('participants')
+      .select('id, event_id')
+      .in('event_id', eventIds)
 
     // Build participant ID list and re-query participant_missions
     const participantIds = (allParticipants || []).map((p) => p.id)

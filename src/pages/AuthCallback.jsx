@@ -9,33 +9,39 @@ export default function AuthCallback() {
     const redirect = sessionStorage.getItem('pq_auth_redirect') || '/organizer'
     sessionStorage.removeItem('pq_auth_redirect')
 
+    // Subscription + timeout live at effect scope so the cleanup actually
+    // runs on unmount (returning them from inside .then() leaks both)
+    let subscription = null
+    let timeout = null
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
         sessionStorage.removeItem('pq_signed_out')
         navigate(redirect, { replace: true })
-      } else {
-        // Wait for the auth state change from the URL hash
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(
-          (event, session) => {
-            if (event === 'SIGNED_IN' && session) {
-              sessionStorage.removeItem('pq_signed_out')
-              subscription.unsubscribe()
-              navigate(redirect, { replace: true })
-            }
-          }
-        )
-
-        // Timeout fallback — if no auth event after 5s, redirect home
-        const timeout = setTimeout(() => {
-          navigate('/', { replace: true })
-        }, 5000)
-
-        return () => {
-          subscription.unsubscribe()
-          clearTimeout(timeout)
-        }
+        return
       }
+
+      // Wait for the auth state change from the URL hash
+      ;({ data: { subscription } } = supabase.auth.onAuthStateChange(
+        (event, session) => {
+          if (event === 'SIGNED_IN' && session) {
+            sessionStorage.removeItem('pq_signed_out')
+            clearTimeout(timeout)
+            navigate(redirect, { replace: true })
+          }
+        }
+      ))
+
+      // Timeout fallback — if no auth event after 5s, redirect home
+      timeout = setTimeout(() => {
+        navigate('/', { replace: true })
+      }, 5000)
     })
+
+    return () => {
+      subscription?.unsubscribe()
+      clearTimeout(timeout)
+    }
   }, [navigate])
 
   return (

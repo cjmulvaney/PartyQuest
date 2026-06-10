@@ -1,5 +1,4 @@
 import { Routes, Route } from 'react-router-dom'
-import { Analytics } from '@vercel/analytics/react'
 import { ThemeProvider } from './hooks/useTheme.jsx'
 import Home from './pages/Home.jsx'
 import Join from './pages/Join.jsx'
@@ -51,7 +50,6 @@ export default function App() {
             <Route path="metrics" element={<MetricsPage />} />
           </Route>
         </Routes>
-        <Analytics />
         <span
           style={{
             position: 'fixed',
@@ -66,7 +64,7 @@ export default function App() {
             letterSpacing: '0.03em',
           }}
         >
-          v2.10
+          v{__APP_VERSION__}
         </span>
       </div>
     </ThemeProvider>

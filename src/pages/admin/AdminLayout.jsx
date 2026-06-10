@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth.js'
 import { useTheme } from '../../hooks/useTheme.jsx'
-import { AdminToastProvider, useAdminToast } from '../../hooks/useAdminToast.jsx'
+import { AdminToastProvider } from '../../hooks/useAdminToast.jsx'
 
 const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL
 

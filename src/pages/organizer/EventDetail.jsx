@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase.js'
 import { useAuth } from '../../hooks/useAuth.js'
 import { getAvatarColor, getInitials } from '../../lib/avatar.js'
 import { insertParticipantWithRetry, selectMissionsForParticipant } from '../../lib/missions.js'
+import { cloneEvent } from '../../lib/cloneEvent.js'
 import { normalizePhone } from '../../lib/phone.js'
 import Leaderboard from '../../components/Leaderboard.jsx'
 import ActivityFeed from '../../components/ActivityFeed.jsx'
@@ -21,6 +22,7 @@ export default function EventDetail() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [ending, setEnding] = useState(false)
+  const [starting, setStarting] = useState(false)
   const [cloning, setCloning] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [timeRemaining, setTimeRemaining] = useState('')
@@ -132,10 +134,6 @@ export default function EventDetail() {
 
       // Check if organizer is also a participant
       if (user) {
-        const orgParticipant = participantData.find(
-          (p) => p.name === user.email || p.access_code
-        )
-        // Check by looking at event organizer's participant record
         const { data: orgPart } = await supabase
           .from('participants')
           .select('access_code')
@@ -280,6 +278,21 @@ export default function EventDetail() {
     return () => clearInterval(interval)
   }, [event])
 
+  async function handleStartEvent() {
+    setStarting(true)
+    const { error: updateError } = await supabase
+      .from('events')
+      .update({ status: 'active' })
+      .eq('id', id)
+
+    if (updateError) {
+      setError('Failed to start event.')
+    } else {
+      await loadData()
+    }
+    setStarting(false)
+  }
+
   async function handleEndEvent() {
     if (!confirm('Are you sure you want to end this event?')) return
 
@@ -329,54 +342,7 @@ export default function EventDetail() {
     setError('')
 
     try {
-      const now = new Date()
-      now.setHours(19, 0, 0, 0)
-      const end = new Date(now)
-      end.setHours(23, 0, 0, 0)
-
-      const code = generateCode(6)
-
-      const { data: newEvent, error: eventErr } = await supabase
-        .from('events')
-        .insert({
-          organizer_id: user.id,
-          name: `${event.name} (Copy)`,
-          event_type: event.event_type,
-          start_time: now.toISOString(),
-          end_time: end.toISOString(),
-          event_code: code,
-          anonymity_enabled: event.anonymity_enabled,
-          feed_mode: event.feed_mode,
-          feed_photos_enabled: event.feed_photos_enabled,
-          feed_comments_enabled: event.feed_comments_enabled,
-          status: 'upcoming',
-        })
-        .select()
-        .single()
-
-      if (eventErr) throw eventErr
-
-      if (config) {
-        await supabase.from('event_config').insert({
-          event_id: newEvent.id,
-          mission_count: config.mission_count,
-          unlock_type: config.unlock_type,
-          unlock_schedule: config.unlock_schedule,
-          tag_filters: config.tag_filters,
-        })
-      }
-
-      if (participants.length > 0) {
-        const participantRows = participants
-          .filter((p) => p.is_active !== false)
-          .map((p) => ({
-            event_id: newEvent.id,
-            name: p.name,
-            access_code: generateCode(6),
-          }))
-        await supabase.from('participants').insert(participantRows)
-      }
-
+      const newEvent = await cloneEvent(supabase, id, user.id)
       navigate(`/organizer/event/${newEvent.id}`)
     } catch (err) {
       setError(err.message || 'Failed to clone event.')
@@ -910,10 +876,23 @@ export default function EventDetail() {
     setSaving(true)
     setError('')
     try {
+      // Diff local state against the DB snapshot (missionAssignments).
+      // Rebalance/drag create synthetic row ids (new-/moved-/empty-) that
+      // must INSERT, and can drop original rows entirely, which must DELETE.
+      const isSyntheticId = (rowId) => typeof rowId === 'string' && /^(new|moved|empty)-/.test(rowId)
       const promises = []
+
       localAssignments.forEach(p => {
+        const localIds = new Set(p.missions.map(pm => pm.id))
         p.missions.forEach(pm => {
-          if (pm.mission_id && pm.mission_id !== pm._originalMissionId) {
+          if (isSyntheticId(pm.id)) {
+            if (pm.mission_id) {
+              promises.push(
+                supabase.from('participant_missions')
+                  .insert({ participant_id: p.id, mission_id: pm.mission_id })
+              )
+            }
+          } else if (pm.mission_id && pm.mission_id !== pm._originalMissionId) {
             promises.push(
               supabase.from('participant_missions')
                 .update({
@@ -927,12 +906,30 @@ export default function EventDetail() {
             )
           }
         })
+
+        // Original rows trimmed out of local state → delete from DB
+        const snapshot = missionAssignments.find(sp => sp.id === p.id)
+        snapshot?.missions.forEach(pm => {
+          if (!localIds.has(pm.id)) {
+            promises.push(
+              supabase.from('participant_missions').delete().eq('id', pm.id)
+            )
+          }
+        })
       })
 
-      await Promise.all(promises)
+      const results = await Promise.all(promises)
+      const failures = results.filter(r => r?.error)
+      // Always reset to DB truth: partial failures must not leave synthetic
+      // rows around to double-insert on a retry.
       await loadMissionAssignments()
+      setLocalAssignments(null)
       setHasUnsavedChanges(false)
       setSelectTarget(null)
+      if (failures.length > 0) {
+        console.error('Assignment save failures:', failures.map(f => f.error))
+        setError(`${failures.length} change${failures.length !== 1 ? 's' : ''} failed to save. Showing what's actually in the database — re-apply and save again.`)
+      }
     } catch (err) {
       setError(err.message || 'Failed to save assignments.')
     }
@@ -1163,6 +1160,15 @@ export default function EventDetail() {
                 className="pq-btn pq-btn-secondary"
               >
                 Edit
+              </button>
+            )}
+            {isUpcoming && (
+              <button
+                onClick={handleStartEvent}
+                disabled={starting}
+                className="pq-btn pq-btn-primary"
+              >
+                {starting ? 'Starting...' : 'Start Event'}
               </button>
             )}
             {!isEnded && (

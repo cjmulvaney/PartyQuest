@@ -122,11 +122,14 @@ export function selectMissionsForParticipant(
  * @param {string} source - 'manual' or 'self'
  * @param {number} maxRetries - Max retry attempts
  * @param {string|null} phone - E.164 phone number (optional)
+ * @param {string|null} preferredCode - Access code to try first, so a code
+ *   already shown to the organizer (CreateEvent review step) matches the DB.
+ *   Falls back to a fresh random code on collision.
  * @returns {Object} The inserted participant record
  */
-export async function insertParticipantWithRetry(supabase, eventId, name, source = 'manual', maxRetries = 3, phone = null) {
+export async function insertParticipantWithRetry(supabase, eventId, name, source = 'manual', maxRetries = 3, phone = null, preferredCode = null) {
   for (let attempt = 0; attempt < maxRetries; attempt++) {
-    const accessCode = generateCode(6)
+    const accessCode = attempt === 0 && preferredCode ? preferredCode : generateCode(6)
     const payload = {
       event_id: eventId,
       name: name.trim(),
