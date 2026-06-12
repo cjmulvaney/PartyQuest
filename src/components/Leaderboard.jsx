@@ -14,7 +14,7 @@ const MEDAL_LABELS = ['1st', '2nd', '3rd']
 const PODIUM_ORDER = [1, 0, 2]
 const PODIUM_HEIGHTS = ['70%', '100%', '55%']
 
-function PodiumPlayer({ entry, rank, anonymity, fullscreen }) {
+function PodiumPlayer({ entry, rank, anonymity, fullscreen, isYou }) {
   if (!entry) return <div className="flex-1" />
 
   const displayName = anonymity ? `Player ${rank + 1}` : entry.name
@@ -80,6 +80,22 @@ function PodiumPlayer({ entry, rank, anonymity, fullscreen }) {
       >
         {displayName}
       </p>
+      {isYou && (
+        <span
+          className="pq-badge"
+          style={{
+            marginTop: '0.25rem',
+            backgroundColor: 'var(--color-primary)',
+            color: 'var(--color-text-inverse)',
+            fontFamily: 'var(--font-heading)',
+            fontWeight: 700,
+            fontSize: '0.65rem',
+            letterSpacing: '0.05em',
+          }}
+        >
+          YOU
+        </span>
+      )}
 
       {/* Points */}
       <p
@@ -111,17 +127,19 @@ function PodiumPlayer({ entry, rank, anonymity, fullscreen }) {
   )
 }
 
-function RankedEntry({ entry, rank, index, anonymity, fullscreen }) {
+function RankedEntry({ entry, rank, index, anonymity, fullscreen, isYou }) {
   const displayName = anonymity ? `Player ${rank}` : entry.name
   const avatarColor = getAvatarColor(anonymity ? entry.id : entry.name)
   const initials = anonymity ? `P${rank}` : getInitials(entry.name)
+  const baseBg = isYou ? 'var(--color-primary-subtle)' : 'var(--color-surface)'
 
   return (
     <div
       className="flex items-center gap-3 px-4 py-3"
       style={{
-        backgroundColor: 'var(--color-surface)',
+        backgroundColor: baseBg,
         borderBottom: '1px solid var(--color-border-light)',
+        borderLeft: isYou ? '3px solid var(--color-primary)' : '3px solid transparent',
         borderRadius: index === 0 ? 'var(--radius-md) var(--radius-md) 0 0' : undefined,
         animation: `slideInUp 0.3s ease-out ${index * 0.06}s both`,
         transition: 'var(--transition-fast)',
@@ -130,7 +148,7 @@ function RankedEntry({ entry, rank, index, anonymity, fullscreen }) {
         e.currentTarget.style.backgroundColor = 'var(--color-surface-hover)'
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.backgroundColor = 'var(--color-surface)'
+        e.currentTarget.style.backgroundColor = baseBg
       }}
     >
       {/* Rank number */}
@@ -166,15 +184,31 @@ function RankedEntry({ entry, rank, index, anonymity, fullscreen }) {
 
       {/* Name */}
       <span
-        className="flex-1 truncate"
+        className="flex-1 truncate flex items-center gap-2"
         style={{
           fontFamily: 'var(--font-body)',
-          fontWeight: 500,
+          fontWeight: isYou ? 700 : 500,
           fontSize: fullscreen ? '1rem' : '0.9rem',
           color: 'var(--color-text)',
         }}
       >
-        {displayName}
+        <span className="truncate">{displayName}</span>
+        {isYou && (
+          <span
+            className="pq-badge flex-shrink-0"
+            style={{
+              backgroundColor: 'var(--color-primary)',
+              color: 'var(--color-text-inverse)',
+              fontFamily: 'var(--font-heading)',
+              fontWeight: 700,
+              fontSize: '0.6rem',
+              letterSpacing: '0.05em',
+              padding: '1px 7px',
+            }}
+          >
+            YOU
+          </span>
+        )}
       </span>
 
       {/* Points */}
@@ -192,10 +226,12 @@ function RankedEntry({ entry, rank, index, anonymity, fullscreen }) {
   )
 }
 
-export default function Leaderboard({ eventId, anonymity = false, fullscreen = false }) {
+export default function Leaderboard({ eventId, anonymity = false, fullscreen = false, participantId = null }) {
   const [scores, setScores] = useState([])
   const [loading, setLoading] = useState(true)
   const channelRef = useRef(null)
+  // Participant ids for THIS event — used to ignore realtime events from others
+  const participantIdsRef = useRef(new Set())
 
   const loadScores = useCallback(async () => {
     // Get all participants for this event
@@ -205,38 +241,46 @@ export default function Leaderboard({ eventId, anonymity = false, fullscreen = f
       .eq('event_id', eventId)
       .eq('is_active', true)
 
+    participantIdsRef.current = new Set((participants || []).map((p) => p.id))
+
     if (!participants || participants.length === 0) {
       setScores([])
       setLoading(false)
       return
     }
 
-    // Get completed missions count per participant
+    // Get completed missions count per participant (with timestamps for tie-breaks)
     const { data: completions } = await supabase
       .from('participant_missions')
-      .select('participant_id')
+      .select('participant_id, completed_at')
       .eq('completed', true)
       .in('participant_id', participants.map((p) => p.id))
 
-    // Count completions per participant
+    // Count completions per participant, tracking when they reached their score
     const counts = {}
+    const lastCompletedAt = {}
     participants.forEach((p) => (counts[p.id] = 0))
     completions?.forEach((c) => {
       if (counts[c.participant_id] !== undefined) {
         counts[c.participant_id]++
+        const t = c.completed_at ? new Date(c.completed_at).getTime() : 0
+        if (t > (lastCompletedAt[c.participant_id] || 0)) {
+          lastCompletedAt[c.participant_id] = t
+        }
       }
     })
 
-    // Build sorted leaderboard
+    // Build sorted leaderboard — full list, ties broken by who reached the
+    // score first (earlier last-completion ranks higher)
     const board = participants
       .map((p, i) => ({
         id: p.id,
         name: p.name,
         displayName: anonymity ? `Player ${i + 1}` : p.name,
         points: counts[p.id] || 0,
+        lastAt: lastCompletedAt[p.id] || Infinity,
       }))
-      .sort((a, b) => b.points - a.points)
-      .slice(0, 10)
+      .sort((a, b) => b.points - a.points || a.lastAt - b.lastAt)
 
     setScores(board)
     setLoading(false)
@@ -258,6 +302,8 @@ export default function Leaderboard({ eventId, anonymity = false, fullscreen = f
           table: 'participant_missions',
         },
         (payload) => {
+          // Ignore completions from other events sharing this table
+          if (!participantIdsRef.current.has(payload.new?.participant_id)) return
           if (payload.new?.completed !== payload.old?.completed) {
             loadScores()
           }
@@ -270,7 +316,8 @@ export default function Leaderboard({ eventId, anonymity = false, fullscreen = f
           schema: 'public',
           table: 'participant_missions',
         },
-        () => {
+        (payload) => {
+          if (!participantIdsRef.current.has(payload.new?.participant_id)) return
           loadScores()
         }
       )
@@ -361,6 +408,7 @@ export default function Leaderboard({ eventId, anonymity = false, fullscreen = f
                   rank={podiumIdx}
                   anonymity={anonymity}
                   fullscreen={fullscreen}
+                  isYou={!!participantId && entry?.id === participantId}
                 />
               )
             })}
@@ -368,7 +416,7 @@ export default function Leaderboard({ eventId, anonymity = false, fullscreen = f
         </div>
       )}
 
-      {/* Ranked list for positions 4-10 */}
+      {/* Ranked list for positions 4+ (full field) */}
       {rest.length > 0 && (
         <div
           className="pq-card"
@@ -382,6 +430,7 @@ export default function Leaderboard({ eventId, anonymity = false, fullscreen = f
               index={i}
               anonymity={anonymity}
               fullscreen={fullscreen}
+              isYou={!!participantId && entry.id === participantId}
             />
           ))}
         </div>

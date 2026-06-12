@@ -372,6 +372,8 @@ export default function ActivityFeed({
   const [comments, setComments] = useState([])
   const [participantMap, setParticipantMap] = useState({})
   const channelRef = useRef(null)
+  // Participant ids for THIS event — used to ignore realtime events from others
+  const participantIdsRef = useRef(new Set())
 
   const loadFeed = useCallback(async () => {
     const { data: participants } = await supabase
@@ -379,6 +381,8 @@ export default function ActivityFeed({
       .select('id, name')
       .eq('event_id', eventId)
       .eq('is_active', true)
+
+    participantIdsRef.current = new Set((participants || []).map((p) => p.id))
 
     if (!participants || participants.length === 0) {
       setEntries([])
@@ -475,6 +479,8 @@ export default function ActivityFeed({
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'participant_missions' },
         (payload) => {
+          // Ignore changes from other events sharing this table
+          if (!participantIdsRef.current.has(payload.new?.participant_id)) return
           const newlyCompleted = payload.new?.completed && !payload.old?.completed
           const newlyRetracted = payload.new?.retracted_at && !payload.old?.retracted_at
           if (newlyCompleted || newlyRetracted) {
@@ -487,7 +493,11 @@ export default function ActivityFeed({
       channel.on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'completion_reactions' },
-        () => loadFeed()
+        (payload) => {
+          const pid = payload.new?.participant_id ?? payload.old?.participant_id
+          if (!participantIdsRef.current.has(pid)) return
+          loadFeed()
+        }
       )
     }
 
@@ -495,7 +505,10 @@ export default function ActivityFeed({
       channel.on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'completion_comments' },
-        () => loadFeed()
+        (payload) => {
+          if (!participantIdsRef.current.has(payload.new?.participant_id)) return
+          loadFeed()
+        }
       )
     }
 

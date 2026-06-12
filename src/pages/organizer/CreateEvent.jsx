@@ -626,6 +626,19 @@ export default function CreateEvent() {
     copyWithToast(text, 'All codes copied!', 'allCodes')
   }
 
+  // Invite link + ready-to-paste message for the post-launch screen.
+  const APP_URL = (import.meta.env.VITE_APP_URL || window.location.origin).trim()
+  const organizerFirstName =
+    user?.user_metadata?.full_name?.split(' ')[0] ||
+    user?.user_metadata?.name?.split(' ')[0] ||
+    null
+  const launchedInviteLink = eventCode
+    ? organizerFirstName
+      ? `${APP_URL}/register/${eventCode.trim()}?from=${encodeURIComponent(organizerFirstName)}`
+      : `${APP_URL}/register/${eventCode.trim()}`
+    : ''
+  const launchedInviteMessage = `You're invited to ${eventName}! I'm running Party Quest — you'll get secret missions to pull off during the party. Tap to join: ${launchedInviteLink}`
+
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
@@ -2098,6 +2111,16 @@ export default function CreateEvent() {
                 }}
               >
                 {eventCode}
+              </p>
+              <button
+                onClick={() => copyWithToast(launchedInviteMessage, 'Invite message copied!', 'launchedInvite')}
+                className="pq-btn pq-btn-primary w-full"
+                style={{ marginTop: '1.5rem', fontFamily: 'var(--font-heading)', fontWeight: 700 }}
+              >
+                {copiedKey === 'launchedInvite' ? 'Copied — paste it anywhere!' : 'Copy invite message'}
+              </button>
+              <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.5rem' }}>
+                A ready-to-send message with your invite link.
               </p>
             </div>
 

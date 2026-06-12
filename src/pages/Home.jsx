@@ -32,6 +32,7 @@ const highlights = [
 export default function Home() {
   const navigate = useNavigate()
   const { theme, toggleTheme } = useTheme()
+  const demoAccessCode = import.meta.env.VITE_DEMO_ACCESS_CODE
 
   return (
     <div style={{ background: 'var(--color-bg)', minHeight: '100vh' }}>
@@ -157,6 +158,25 @@ export default function Home() {
             Join an Event
           </button>
         </div>
+
+        {demoAccessCode && (
+          <button
+            onClick={() => navigate(`/play/${demoAccessCode}`)}
+            className="animate-slide-up stagger-3"
+            style={{
+              marginTop: '14px',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '0.9375rem',
+              fontWeight: 600,
+              fontFamily: 'var(--font-body)',
+              color: 'var(--color-secondary)',
+            }}
+          >
+            Or try it as a guest — no signup →
+          </button>
+        )}
       </section>
 
       {/* Highlights — scannable bullets */}

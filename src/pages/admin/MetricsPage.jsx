@@ -19,21 +19,52 @@ export default function MetricsPage() {
   }, [])
 
   async function loadData() {
+    // Exclude the permanent demo event (event_code DEMO01) from all-time stats
+    const { data: demoEv } = await supabase
+      .from('events')
+      .select('id')
+      .eq('event_code', 'DEMO01')
+      .maybeSingle()
+    const demoId = demoEv?.id || null
+
+    let demoParticipantIds = new Set()
+    if (demoId) {
+      const { data: demoParts } = await supabase
+        .from('participants')
+        .select('id')
+        .eq('event_id', demoId)
+      demoParticipantIds = new Set((demoParts || []).map((p) => p.id))
+    }
+
+    const eventsQuery = supabase.from('events').select('*', { count: 'exact', head: true }).neq('status', 'draft')
+    const partsCountQuery = supabase.from('participants').select('*', { count: 'exact', head: true }).eq('is_active', true)
+    const phoneQuery = supabase.from('participants').select('event_id').eq('is_active', true).not('phone', 'is', null)
+    if (demoId) {
+      eventsQuery.neq('id', demoId)
+      partsCountQuery.neq('event_id', demoId)
+      phoneQuery.neq('event_id', demoId)
+    }
+
     const [
       { count: evCount, error: evErr },
       { count: partCount, error: partErr },
       { data: phoneParts, error: phoneErr },
-      { data: missions, error: missionsErr },
+      { data: missionsRaw, error: missionsErr },
       { data: sv, error: svErr },
       { count: returning, error: retErr },
     ] = await Promise.all([
-      supabase.from('events').select('*', { count: 'exact', head: true }).neq('status', 'draft'),
-      supabase.from('participants').select('*', { count: 'exact', head: true }).eq('is_active', true),
-      supabase.from('participants').select('event_id').eq('is_active', true).not('phone', 'is', null),
+      eventsQuery,
+      partsCountQuery,
+      phoneQuery,
       supabase.from('participant_missions').select('participant_id, completed'),
       supabase.from('event_surveys').select('rating, increased_enjoyment, met_someone, would_recommend'),
       supabase.from('known_players').select('*', { count: 'exact', head: true }).gt('event_count', 1),
     ])
+
+    // Drop the demo guest/cast completions from per-player mission stats
+    const missions = demoParticipantIds.size
+      ? (missionsRaw || []).filter((pm) => !demoParticipantIds.has(pm.participant_id))
+      : (missionsRaw || [])
 
     if (evErr) toast.error(`Failed to load events: ${evErr.message}`)
     if (partErr) toast.error(`Failed to load participants: ${partErr.message}`)

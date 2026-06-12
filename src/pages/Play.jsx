@@ -40,6 +40,12 @@ export default function Play() {
   const [error, setError] = useState('')
   const [toast, setToast] = useState('')
   const [reconnecting, setReconnecting] = useState(false)
+  const [endedRecap, setEndedRecap] = useState(null)
+  const [recapCopied, setRecapCopied] = useState(false)
+  const [installPrompt, setInstallPrompt] = useState(null)
+  const [installDismissed, setInstallDismissed] = useState(
+    () => !!localStorage.getItem('pq_pwa_hint_dismissed')
+  )
   const unlockTimersRef = useRef([])
   const prevUnlockedRef = useRef(new Set())
   const retryTimerRef = useRef(null)
@@ -100,13 +106,67 @@ export default function Play() {
     setMissions(pm || [])
     setReconnecting(false)
     setLoading(false)
-
-    // Passive redirect: if event has ended, send participant to the feedback survey
-    if (evt?.status === 'ended') {
-      navigate(`/feedback/${accessCode}`, { replace: true })
-      return
-    }
   }, [accessCode])
+
+  // When the event has ended, build a shareable recap (winner + top 3, totals,
+  // crowd-favorite mission) instead of bouncing straight to the survey.
+  const loadEndedRecap = useCallback(async (evt, part, myMissions) => {
+    const { data: parts } = await supabase
+      .from('participants_public')
+      .select('id, name')
+      .eq('event_id', evt.id)
+      .eq('is_active', true)
+
+    const ids = (parts || []).map((p) => p.id)
+    const { data: comps } = ids.length
+      ? await supabase
+          .from('participant_missions')
+          .select('participant_id, mission_id, missions(text)')
+          .eq('completed', true)
+          .in('participant_id', ids)
+      : { data: [] }
+
+    const counts = {}
+    const missionCounts = {}
+    ;(comps || []).forEach((c) => {
+      counts[c.participant_id] = (counts[c.participant_id] || 0) + 1
+      const key = c.mission_id
+      if (!missionCounts[key]) missionCounts[key] = { text: c.missions?.text, count: 0 }
+      missionCounts[key].count++
+    })
+
+    const standings = (parts || [])
+      .map((p) => ({ id: p.id, name: p.name, count: counts[p.id] || 0 }))
+      .filter((p) => p.count > 0)
+      .sort((a, b) => b.count - a.count)
+
+    const total = (comps || []).length
+    const topMission = Object.values(missionCounts).sort((a, b) => b.count - a.count)[0]
+    const myCount = (myMissions || []).filter((m) => m.completed).length
+    const myRank = standings.findIndex((s) => s.id === part.id)
+
+    const medals = ['🥇', '🥈', '🥉']
+    const lines = [
+      `🎉 ${evt.name} — that's a wrap!`,
+      myCount > 0
+        ? `I pulled off ${myCount} mission${myCount === 1 ? '' : 's'}${myRank >= 0 && myRank < 3 ? ` and finished ${medals[myRank]}` : ''}.`
+        : null,
+      ...standings.slice(0, 3).map(
+        (p, i) => `${medals[i]} ${p.name} — ${p.count} mission${p.count === 1 ? '' : 's'}`
+      ),
+      topMission ? `🔥 Crowd favorite: "${topMission.text}"` : null,
+      `Played with Party Quest 🎭`,
+    ].filter(Boolean)
+
+    setEndedRecap({
+      standings,
+      total,
+      topMission,
+      myCount,
+      myRank,
+      shareText: lines.join('\n'),
+    })
+  }, [])
 
   // On mount: load cache immediately so there's no blank screen on return visits
   useEffect(() => {
@@ -126,6 +186,36 @@ export default function Play() {
     window.addEventListener('focus', onFocus)
     return () => window.removeEventListener('focus', onFocus)
   }, [loadData])
+
+  // Build the recap once the event has ended
+  useEffect(() => {
+    if (event?.status === 'ended' && participant && !endedRecap) {
+      loadEndedRecap(event, participant, missions)
+    }
+  }, [event, participant, missions, endedRecap, loadEndedRecap])
+
+  // Capture the PWA install prompt (Android/Chrome) so we can offer it later
+  useEffect(() => {
+    const handler = (e) => {
+      e.preventDefault()
+      setInstallPrompt(e)
+    }
+    window.addEventListener('beforeinstallprompt', handler)
+    return () => window.removeEventListener('beforeinstallprompt', handler)
+  }, [])
+
+  function dismissInstallHint() {
+    setInstallDismissed(true)
+    localStorage.setItem('pq_pwa_hint_dismissed', '1')
+  }
+
+  async function handleInstall() {
+    if (!installPrompt) return
+    installPrompt.prompt()
+    await installPrompt.userChoice
+    setInstallPrompt(null)
+    dismissInstallHint()
+  }
 
   // Unlock timers
   useEffect(() => {
@@ -237,13 +327,133 @@ export default function Play() {
     )
   }
 
+  // --- Ended: shareable recap + soft survey landing ---
+  if (event?.status === 'ended') {
+    async function copyRecap() {
+      try {
+        await navigator.clipboard.writeText(endedRecap?.shareText || '')
+        setRecapCopied(true)
+        setTimeout(() => setRecapCopied(false), 2500)
+      } catch {
+        // Clipboard unavailable — ignore rather than show false success
+      }
+    }
+    return (
+      <div className="min-h-screen" style={{ backgroundColor: 'var(--color-bg)', paddingBottom: '3rem' }}>
+        <div style={{ maxWidth: '28rem', margin: '0 auto', padding: '1.5rem 1rem' }}>
+          <div className="text-center animate-fade-in" style={{ marginBottom: '1.5rem' }}>
+            <p style={{ fontSize: '2.5rem', lineHeight: 1, marginBottom: '0.5rem' }}>🎉</p>
+            <h1 style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: '1.6rem', color: 'var(--color-text)', margin: 0 }}>
+              That's a wrap!
+            </h1>
+            <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.95rem', marginTop: '0.35rem', fontFamily: 'var(--font-body)' }}>
+              {event.name} has ended.
+              {endedRecap?.myCount > 0
+                ? ` You pulled off ${endedRecap.myCount} mission${endedRecap.myCount === 1 ? '' : 's'}${endedRecap.myRank >= 0 && endedRecap.myRank < 3 ? ` and finished in the top 3!` : '.'}`
+                : ''}
+            </p>
+          </div>
+
+          {!endedRecap ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="pq-spinner" />
+            </div>
+          ) : (
+            <>
+              <div className="animate-slide-up" style={{ marginBottom: '1.25rem' }}>
+                <Leaderboard
+                  eventId={event.id}
+                  anonymity={event.anonymity_enabled}
+                  participantId={participant?.id}
+                />
+              </div>
+
+              <button
+                onClick={copyRecap}
+                className="pq-btn pq-btn-secondary w-full"
+                style={{ marginBottom: '0.75rem' }}
+              >
+                {recapCopied ? 'Copied — paste it in the group chat!' : 'Copy results to share'}
+              </button>
+
+              <button
+                onClick={() => navigate(`/feedback/${accessCode}`)}
+                className="pq-btn pq-btn-primary w-full"
+                style={{ fontFamily: 'var(--font-heading)', fontWeight: 700 }}
+              >
+                Share a quick bit of feedback
+              </button>
+              <p style={{ textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.8rem', marginTop: '0.6rem', fontFamily: 'var(--font-body)' }}>
+                Takes 30 seconds — it helps the organizer a ton.
+              </p>
+            </>
+          )}
+        </div>
+
+        {toast && (
+          <div className="pq-toast animate-slide-up">
+            <div className="pq-toast-inner">{toast}</div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   const now = new Date()
   const eventStarted = !event?.start_time || new Date(event.start_time) <= now
   const completedCount = missions.filter(m => m.completed).length
   const totalCount = missions.length
 
+  // PWA install hint: one polite nudge after the first completion (engaged moment)
+  const isStandalone =
+    window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent || '') && !window.MSStream
+  const showInstallHint =
+    !installDismissed &&
+    !isStandalone &&
+    tab === 'missions' &&
+    completedCount >= 1 &&
+    (installPrompt || isIOS)
+
+  const isDemo = accessCode === import.meta.env.VITE_DEMO_ACCESS_CODE
+
   return (
     <div className="min-h-screen" style={{ backgroundColor: 'var(--color-bg)', paddingBottom: '5rem' }}>
+      {isDemo && (
+        <div
+          style={{
+            background: 'var(--color-primary)',
+            color: 'var(--color-text-inverse)',
+            padding: '8px 16px',
+            textAlign: 'center',
+            fontSize: '0.82rem',
+            fontFamily: 'var(--font-body)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '0.6rem',
+            flexWrap: 'wrap',
+          }}
+        >
+          <span>You're playing the demo — tap missions to see how it feels.</span>
+          <button
+            onClick={() => navigate('/organizer')}
+            style={{
+              background: 'rgba(255,255,255,0.2)',
+              border: 'none',
+              color: 'inherit',
+              fontWeight: 700,
+              fontFamily: 'var(--font-heading)',
+              borderRadius: 'var(--radius-full)',
+              padding: '3px 12px',
+              cursor: 'pointer',
+              fontSize: '0.8rem',
+            }}
+          >
+            Host your own →
+          </button>
+        </div>
+      )}
       {reconnecting && (
         <div style={{
           background: 'var(--color-warning-light, #fffbeb)',
@@ -306,6 +516,54 @@ export default function Play() {
             </div>
           )}
         </div>
+
+        {/* PWA install hint — appears once, after first completion */}
+        {showInstallHint && (
+          <div
+            className="pq-card animate-scale-in"
+            style={{
+              backgroundColor: 'var(--color-secondary-light, #e6f7f5)',
+              borderColor: 'var(--color-secondary)',
+              marginBottom: '1rem',
+              position: 'relative',
+            }}
+          >
+            <button
+              onClick={dismissInstallHint}
+              aria-label="Dismiss"
+              className="pq-btn pq-btn-ghost"
+              style={{ position: 'absolute', top: 8, right: 8, padding: '2px 8px', minHeight: 'auto', fontSize: '1rem', lineHeight: 1, color: 'var(--color-text-muted)' }}
+            >
+              ×
+            </button>
+            <div className="flex items-start gap-3" style={{ paddingRight: '1.5rem' }}>
+              <span style={{ fontSize: '1.4rem', lineHeight: 1.1 }} aria-hidden="true">📲</span>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: '0.95rem', color: 'var(--color-text)', margin: 0 }}>
+                  Add Party Quest to your home screen
+                </p>
+                {isIOS && !installPrompt ? (
+                  <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.82rem', color: 'var(--color-text-secondary)', marginTop: '0.35rem', lineHeight: 1.45 }}>
+                    Tap the Share button <span aria-hidden="true">􀈂</span> in Safari, then <strong>Add to Home Screen</strong> — no digging through texts to get back in.
+                  </p>
+                ) : (
+                  <>
+                    <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.82rem', color: 'var(--color-text-secondary)', marginTop: '0.35rem', lineHeight: 1.45 }}>
+                      Pin it so you can jump back to your missions in one tap.
+                    </p>
+                    <button
+                      onClick={handleInstall}
+                      className="pq-btn pq-btn-secondary"
+                      style={{ marginTop: '0.6rem', fontSize: '0.85rem', padding: '6px 14px', minHeight: 'auto' }}
+                    >
+                      Add to home screen
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Welcome card */}
         {showWelcome && tab === 'missions' && (
@@ -408,7 +666,7 @@ export default function Play() {
 
         {tab === 'leaderboard' && event && (
           <div className="animate-fade-in">
-            <Leaderboard eventId={event.id} anonymity={event.anonymity_enabled} />
+            <Leaderboard eventId={event.id} anonymity={event.anonymity_enabled} participantId={participant?.id} />
           </div>
         )}
 

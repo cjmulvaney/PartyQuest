@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Figtree:wght@400;500;600&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1200px; height: 630px; }
+  body {
+    font-family: 'Figtree', sans-serif;
+    background: #FEFCF8;
+    background-image: radial-gradient(circle at 88% 18%, rgba(78,205,196,0.18), transparent 42%),
+                      radial-gradient(circle at 12% 92%, rgba(255,225,86,0.22), transparent 45%);
+    width: 1200px; height: 630px;
+    display: flex; flex-direction: column;
+    justify-content: center;
+    padding: 76px 84px;
+    position: relative;
+    overflow: hidden;
+  }
+  .pill {
+    display: inline-flex; align-items: center; gap: 12px;
+    background: #FF6B6B; color: #fff;
+    font-family: 'Fredoka', sans-serif; font-weight: 600;
+    font-size: 28px; letter-spacing: 0.5px;
+    padding: 14px 28px; border-radius: 999px;
+    box-shadow: 0 10px 30px rgba(255,107,107,0.35);
+    align-self: flex-start;
+  }
+  .dot { width: 14px; height: 14px; border-radius: 999px; background: #FFE156; }
+  h1 {
+    font-family: 'Fredoka', sans-serif; font-weight: 700;
+    font-size: 92px; line-height: 1.04; color: #1E293B;
+    margin-top: 40px; max-width: 940px;
+  }
+  h1 .hl { color: #FF6B6B; }
+  p.sub {
+    font-size: 36px; color: #475569; font-weight: 500;
+    margin-top: 30px; max-width: 880px; line-height: 1.35;
+  }
+  .chips { display: flex; gap: 18px; margin-top: 44px; }
+  .chip {
+    font-family: 'Fredoka', sans-serif; font-weight: 500; font-size: 26px;
+    padding: 12px 26px; border-radius: 999px; color: #1E293B;
+    background: #fff; border: 2px solid #E2E8F0;
+  }
+  .chip.teal { background: #4ECDC4; color: #fff; border-color: #4ECDC4; }
+  .chip.yellow { background: #FFE156; color: #1E293B; border-color: #FFE156; }
+  .url {
+    position: absolute; right: 84px; top: 84px;
+    font-family: 'Fredoka', sans-serif; font-weight: 600; font-size: 26px;
+    color: #94A3B8;
+  }
+</style>
+</head>
+<body>
+  <span class="pill"><span class="dot"></span>PARTY QUEST</span>
+  <h1>Secret missions for<br>your <span class="hl">party</span>.</h1>
+  <p class="sub">Hand your guests playful missions to pull off — with a live leaderboard and a photo feed.</p>
+  <div class="chips">
+    <span class="chip teal">Live leaderboard</span>
+    <span class="chip yellow">Photo feed</span>
+    <span class="chip">No app to install</span>
+  </div>
+  <span class="url">partyquest.connormulvaney.com</span>
+</body>
+</html>

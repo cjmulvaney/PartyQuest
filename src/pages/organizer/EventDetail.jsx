@@ -117,19 +117,30 @@ export default function EventDetail() {
       .order('name')
 
     if (participantData) {
-      // Get completion counts for each participant
-      const withCounts = await Promise.all(
-        participantData.map(async (p) => {
-          const { data: missions } = await supabase
-            .from('participant_missions')
-            .select('id, completed')
-            .eq('participant_id', p.id)
+      // Get completion counts for all participants in one query, grouped client-side
+      const pIds = participantData.map((p) => p.id)
+      const { data: allMissions } = await supabase
+        .from('participant_missions')
+        .select('participant_id, completed')
+        .in('participant_id', pIds)
 
-          const total = missions?.length || 0
-          const completed = missions?.filter((m) => m.completed).length || 0
-          return { ...p, total, completed }
-        })
-      )
+      const totals = {}
+      const completedCounts = {}
+      pIds.forEach((pid) => {
+        totals[pid] = 0
+        completedCounts[pid] = 0
+      })
+      ;(allMissions || []).forEach((m) => {
+        if (totals[m.participant_id] === undefined) return
+        totals[m.participant_id]++
+        if (m.completed) completedCounts[m.participant_id]++
+      })
+
+      const withCounts = participantData.map((p) => ({
+        ...p,
+        total: totals[p.id] || 0,
+        completed: completedCounts[p.id] || 0,
+      }))
       setParticipants(withCounts)
 
       // Check if organizer is also a participant
@@ -185,15 +196,18 @@ export default function EventDetail() {
       return
     }
 
-    const assignments = await Promise.all(
-      parts.map(async (p) => {
-        const { data: pm } = await supabase
-          .from('participant_missions')
-          .select('id, completed, completed_at, mission_id, missions(text, category_id, categories(name))')
-          .eq('participant_id', p.id)
-        return { ...p, missions: pm || [] }
-      })
-    )
+    // One query for every participant's missions, grouped client-side
+    const pIds = parts.map((p) => p.id)
+    const { data: allPm } = await supabase
+      .from('participant_missions')
+      .select('id, participant_id, completed, completed_at, mission_id, missions(text, category_id, categories(name))')
+      .in('participant_id', pIds)
+
+    const byParticipant = {}
+    ;(allPm || []).forEach((pm) => {
+      ;(byParticipant[pm.participant_id] ||= []).push(pm)
+    })
+    const assignments = parts.map((p) => ({ ...p, missions: byParticipant[p.id] || [] }))
 
     setMissionAssignments(assignments)
   }, [id])
@@ -1082,11 +1096,31 @@ export default function EventDetail() {
       ? (totalCompletions / activeParticipants.length).toFixed(1)
       : '0'
 
+  // Emoji-friendly, paste-ready results message for the group chat
+  const recapStandings = [...activeParticipants]
+    .filter((p) => p.completed > 0)
+    .sort((a, b) => b.completed - a.completed)
+  const medals = ['🥇', '🥈', '🥉']
+  const recapText = [
+    `🎉 ${event.name} — results are in!`,
+    ...recapStandings.slice(0, 3).map(
+      (p, i) => `${medals[i]} ${p.name} — ${p.completed} mission${p.completed === 1 ? '' : 's'}`
+    ),
+    `✅ ${totalCompletions} missions pulled off${joinedCount ? ` by ${joinedCount} players` : ''}`,
+    mostCompletedMission ? `🔥 Crowd favorite: "${mostCompletedMission.text}"` : null,
+    `📊 ${participationRate}% of guests got in on it`,
+  ]
+    .filter(Boolean)
+    .join('\n')
+
   const APP_URL = (import.meta.env.VITE_APP_URL || window.location.origin).trim()
   const organizerFirstName = user?.user_metadata?.full_name?.split(' ')[0] || user?.user_metadata?.name?.split(' ')[0] || null
   const inviteLink = organizerFirstName
     ? `${APP_URL}/register/${event.event_code.trim()}?from=${encodeURIComponent(organizerFirstName)}`
     : `${APP_URL}/register/${event.event_code.trim()}`
+
+  // Ready-to-paste invite message for SMS/group chats (kept under ~300 chars).
+  const inviteMessage = `You're invited to ${event.name}! I'm running Party Quest — you'll get secret missions to pull off during the party. Tap to join: ${inviteLink}`
 
   const tabItems = [
     { key: 'participants', label: 'Participants' },
@@ -1250,6 +1284,13 @@ export default function EventDetail() {
                   {showQR ? 'Hide QR' : 'QR Code'}
                 </button>
               </div>
+              <button
+                onClick={() => copyWithToast(inviteMessage, 'Invite message copied!', 'inviteMessage')}
+                className="pq-btn pq-btn-primary w-full mt-3"
+                style={{ fontSize: '0.875rem' }}
+              >
+                {copiedKey === 'inviteMessage' ? 'Copied — paste it anywhere!' : 'Copy invite message'}
+              </button>
               {showQR && (
                 <div
                   className="mt-4 p-6 flex flex-col items-center animate-scale-in"
@@ -1380,6 +1421,15 @@ export default function EventDetail() {
                   "{mostCompletedMission.text}" ({mostCompletedMission.count} completions)
                 </p>
               </div>
+            )}
+            {recapStandings.length > 0 && (
+              <button
+                onClick={() => copyWithToast(recapText, 'Recap copied — paste it in the group chat!', 'recap')}
+                className="pq-btn pq-btn-primary w-full mt-4"
+                style={{ fontSize: '0.875rem' }}
+              >
+                {copiedKey === 'recap' ? 'Copied — paste it anywhere!' : 'Copy recap for the group chat'}
+              </button>
             )}
           </div>
         )}

@@ -1,6 +1,40 @@
 import { useState, useRef } from 'react'
 import { supabase } from '../lib/supabase.js'
 
+// Downscale + re-encode phone photos before upload so party wifi isn't choked
+// by 8–12 MB originals. Max edge 1280px, JPEG quality 0.8. Returns the original
+// file untouched if it's already small or if anything goes wrong.
+async function compressImage(file) {
+  if (!file.type.startsWith('image/') || file.size < 300 * 1024) return file
+  try {
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result)
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+    const img = await new Promise((resolve, reject) => {
+      const i = new Image()
+      i.onload = () => resolve(i)
+      i.onerror = reject
+      i.src = dataUrl
+    })
+    const maxEdge = 1280
+    const scale = Math.min(1, maxEdge / Math.max(img.width, img.height))
+    const w = Math.round(img.width * scale)
+    const h = Math.round(img.height * scale)
+    const canvas = document.createElement('canvas')
+    canvas.width = w
+    canvas.height = h
+    canvas.getContext('2d').drawImage(img, 0, 0, w, h)
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.8))
+    // Never upload something larger than the original
+    return blob && blob.size < file.size ? blob : file
+  } catch {
+    return file
+  }
+}
+
 export default function MissionCard({ mission, onComplete, onUncomplete }) {
   const isCompleted = mission.completed
   const [expanded, setExpanded] = useState(false)
@@ -39,12 +73,21 @@ export default function MissionCard({ mission, onComplete, onUncomplete }) {
     setUploading(true)
     setUploadError('')
     try {
-      const fileExt = file.name.includes('.') ? file.name.split('.').pop() : 'jpg'
+      const upload = await compressImage(file)
+      // If compression produced a JPEG blob, the extension/content-type are jpg;
+      // otherwise fall back to the original file's extension.
+      const compressed = upload !== file
+      const fileExt = compressed
+        ? 'jpg'
+        : file.name.includes('.') ? file.name.split('.').pop() : 'jpg'
       const fileName = `${mission.id}-${Date.now()}.${fileExt}`
 
       const { error: storageError } = await supabase.storage
         .from('photos')
-        .upload(fileName, file, { upsert: true })
+        .upload(fileName, upload, {
+          upsert: true,
+          contentType: compressed ? 'image/jpeg' : file.type || undefined,
+        })
 
       if (storageError) throw storageError
 

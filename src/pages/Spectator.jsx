@@ -12,6 +12,7 @@ export default function Spectator() {
   const [event, setEvent] = useState(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const APP_URL = (import.meta.env.VITE_APP_URL || window.location.origin).trim()
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -20,7 +21,7 @@ export default function Spectator() {
 
     const { data, error: fetchError } = await supabase
       .from('events_public')
-      .select('id, name, anonymity_enabled, status, feed_mode, feed_photos_enabled, feed_comments_enabled, feed_reactions_enabled, feed_interactive_comments_enabled, feed_hidden')
+      .select('id, name, event_code, anonymity_enabled, status, feed_mode, feed_photos_enabled, feed_comments_enabled, feed_reactions_enabled, feed_interactive_comments_enabled, feed_hidden')
       .eq('event_code', eventCode.toUpperCase().trim())
       .in('status', ['active', 'upcoming'])
       .single()
@@ -36,20 +37,66 @@ export default function Spectator() {
   }
 
   if (event) {
+    const registerLink = `${APP_URL}/register/${event.event_code}`
     return (
-      <div className="min-h-screen" style={{ backgroundColor: 'var(--color-bg)', padding: '1.5rem 1rem 2rem' }}>
-        <div style={{ maxWidth: '56rem', margin: '0 auto' }}>
-          {/* Header */}
-          <div className="flex items-start justify-between animate-fade-in" style={{ marginBottom: '1.5rem' }}>
-            <div>
-              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', fontFamily: 'var(--font-body)', marginBottom: '2px' }}>
-                Spectator View
+      <div className="min-h-screen" style={{ backgroundColor: 'var(--color-bg)', padding: '1.5rem 1.5rem 2rem' }}>
+        <div style={{ maxWidth: '72rem', margin: '0 auto' }}>
+          {/* Projector header bar — readable from across the room */}
+          <div
+            className="animate-fade-in"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '1.5rem',
+              flexWrap: 'wrap',
+              background: 'var(--color-primary-subtle)',
+              border: '1px solid var(--color-primary-light)',
+              borderRadius: 'var(--radius-lg)',
+              padding: '1.25rem 1.75rem',
+              marginBottom: '1.75rem',
+            }}
+          >
+            {/* Event name */}
+            <div style={{ minWidth: 0 }}>
+              <p style={{ color: 'var(--color-primary)', fontSize: '0.8rem', fontWeight: 600, fontFamily: 'var(--font-body)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '0.25rem' }}>
+                Party Quest · Live
               </p>
-              <h1 style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: '1.75rem', color: 'var(--color-text)', margin: 0 }}>
+              <h1 style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: 'clamp(1.75rem, 4vw, 3rem)', color: 'var(--color-text)', margin: 0, lineHeight: 1.05 }}>
                 {event.name}
               </h1>
             </div>
-            <div className="flex items-center gap-2">
+
+            {/* Join: big code + QR */}
+            <div className="flex items-center" style={{ gap: '1.5rem' }}>
+              <div style={{ textAlign: 'right' }}>
+                <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', fontFamily: 'var(--font-body)', marginBottom: '0.15rem' }}>
+                  Join at {APP_URL.replace(/^https?:\/\//, '')}
+                </p>
+                <p style={{ fontFamily: 'var(--font-heading)', fontWeight: 800, fontSize: 'clamp(2rem, 5vw, 3.5rem)', color: 'var(--color-primary)', letterSpacing: '0.12em', lineHeight: 1, margin: 0 }}>
+                  {event.event_code}
+                </p>
+              </div>
+              <div
+                style={{
+                  background: '#fff',
+                  padding: '0.5rem',
+                  borderRadius: 'var(--radius-md)',
+                  lineHeight: 0,
+                  flexShrink: 0,
+                }}
+              >
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&margin=0&data=${encodeURIComponent(registerLink)}`}
+                  alt="Scan to join"
+                  width={120}
+                  height={120}
+                />
+              </div>
+            </div>
+
+            {/* Controls */}
+            <div className="flex items-center gap-2" style={{ marginLeft: 'auto' }}>
               <button
                 className="theme-toggle"
                 data-active={theme === 'dark'}
@@ -167,6 +214,23 @@ export default function Spectator() {
               ) : 'Watch Event'}
             </button>
           </form>
+
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '0.6rem',
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border-light)',
+              borderRadius: 'var(--radius-md)',
+              padding: '0.75rem 0.9rem',
+            }}
+          >
+            <span style={{ fontSize: '1.1rem', lineHeight: 1.2 }} aria-hidden="true">📺</span>
+            <p style={{ color: 'var(--color-text-secondary)', fontSize: '0.8rem', margin: 0, lineHeight: 1.45 }}>
+              <strong style={{ color: 'var(--color-text)' }}>Cast this on the TV.</strong> Open it on a laptop and AirPlay or screen-mirror to your TV — guests can scan the on-screen code to join mid-party.
+            </p>
+          </div>
         </div>
       </div>
     </div>
