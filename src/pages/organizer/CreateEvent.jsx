@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase.js'
 import { useAuth } from '../../hooks/useAuth.js'
-import { generateCode, selectMissionsForParticipant, insertParticipantWithRetry } from '../../lib/missions.js'
+import { generateCode, selectMissionsForParticipant, insertParticipantWithRetry, fetchEligibleMissions } from '../../lib/missions.js'
 import { normalizePhone } from '../../lib/phone.js'
 
 const EVENT_TYPE_DB_MAP = {
@@ -21,6 +21,11 @@ const EVENT_TYPES = [
 const HOW_HEARD_OPTIONS = ['Friend', 'Social media', 'Search', 'Other']
 
 const STEP_LABELS = ['Event Basics', 'Game Setup', 'Review & Launch']
+
+// Custom (event-scoped) missions — keep the list small enough not to distort
+// allocation, and the text short enough to fit a mission card.
+const CUSTOM_MISSION_CAP = 20
+const CUSTOM_MISSION_MAXLEN = 200
 
 export default function CreateEvent() {
   const navigate = useNavigate()
@@ -75,6 +80,11 @@ export default function CreateEvent() {
   const [reviewTab, setReviewTab] = useState('summary')
   const [previewMissions, setPreviewMissions] = useState([])
   const [previewLoading, setPreviewLoading] = useState(false)
+  // Custom missions — { id?, text }. In edit mode rows carry a DB id and are
+  // written live; for a new event they buffer here and insert after creation.
+  const [customMissions, setCustomMissions] = useState([])
+  const [newCustomMission, setNewCustomMission] = useState('')
+  const [savingCustom, setSavingCustom] = useState(false)
 
   // Post-launch fields (moved from Step 1)
   const [howHeard, setHowHeard] = useState('')
@@ -173,6 +183,14 @@ export default function CreateEvent() {
         setMaxParticipants(null)
       }
       if (data.event_code) setEventCode(data.event_code)
+      // Load existing custom missions for this event
+      const { data: customs } = await supabase
+        .from('missions')
+        .select('id, text')
+        .eq('event_id', editId)
+        .eq('active', true)
+        .order('created_at')
+      if (customs) setCustomMissions(customs.map((c) => ({ id: c.id, text: c.text })))
     }
     loadEvent()
   }, [editId, user])
@@ -197,6 +215,7 @@ export default function CreateEvent() {
           const { count } = await supabase
             .from('missions')
             .select('id', { count: 'exact', head: true })
+            .is('event_id', null)
             .eq('active', true)
             .eq('category_id', cat.id)
           counts[cat.id] = count || 0
@@ -219,6 +238,7 @@ export default function CreateEvent() {
       const { data } = await supabase
         .from('missions')
         .select('id, text')
+        .is('event_id', null)
         .eq('active', true)
         .eq('category_id', catId)
         .order('text')
@@ -239,6 +259,7 @@ export default function CreateEvent() {
       const { count } = await supabase
         .from('missions')
         .select('id', { count: 'exact', head: true })
+        .is('event_id', null)
         .eq('active', true)
         .in('category_id', selectedTags)
 
@@ -308,8 +329,8 @@ export default function CreateEvent() {
         return 'End time must be after start time.'
     }
     if (s === 2) {
-      if (selectedTags.length === 0)
-        return 'Select at least one mission category.'
+      if (selectedTags.length === 0 && customMissions.length === 0)
+        return 'Select at least one mission category or add a custom mission.'
       if (unlockType === 'timed') {
         if (batches.some((b) => !b.time || b.time.trim() === ''))
           return 'Set an unlock time for every batch.'
@@ -362,12 +383,56 @@ export default function CreateEvent() {
     setGeneratedParticipants(participants)
   }
 
+  // Add a custom mission. New events buffer in state; edit mode writes live.
+  async function addCustomMission() {
+    const text = newCustomMission.trim()
+    if (!text) return
+    if (customMissions.length >= CUSTOM_MISSION_CAP) {
+      setError(`Custom mission limit (${CUSTOM_MISSION_CAP}) reached.`)
+      return
+    }
+    setError('')
+    const clipped = text.slice(0, CUSTOM_MISSION_MAXLEN)
+    if (isEditMode && editEventId) {
+      setSavingCustom(true)
+      const { data, error: err } = await supabase
+        .from('missions')
+        .insert({ text: clipped, event_id: editEventId, created_by: user.id })
+        .select('id, text')
+        .single()
+      setSavingCustom(false)
+      if (err) { setError(err.message || 'Failed to add custom mission.'); return }
+      setCustomMissions((prev) => [...prev, { id: data.id, text: data.text }])
+    } else {
+      setCustomMissions((prev) => [...prev, { text: clipped }])
+    }
+    setNewCustomMission('')
+  }
+
+  // Remove a custom mission. Live rows (edit mode): deactivate if already
+  // assigned to keep history, otherwise hard-delete. Buffered rows just drop.
+  async function removeCustomMission(index) {
+    const m = customMissions[index]
+    if (m.id) {
+      const { count } = await supabase
+        .from('participant_missions')
+        .select('id', { count: 'exact', head: true })
+        .eq('mission_id', m.id)
+      const { error: err } = count > 0
+        ? await supabase.from('missions').update({ active: false }).eq('id', m.id)
+        : await supabase.from('missions').delete().eq('id', m.id)
+      if (err) { setError(err.message || 'Failed to remove custom mission.'); return }
+    }
+    setCustomMissions((prev) => prev.filter((_, i) => i !== index))
+  }
+
   async function loadPreviewMissions() {
     setPreviewLoading(true)
     try {
       let query = supabase
         .from('missions')
         .select('id, text, category_id, categories(name)')
+        .is('event_id', null)
         .eq('active', true)
 
       if (selectedTags.length > 0) {
@@ -479,6 +544,18 @@ export default function CreateEvent() {
 
         if (configError) throw configError
 
+        // Insert buffered custom missions before assignment so they're in the pool
+        if (customMissions.length > 0) {
+          const { error: customErr } = await supabase.from('missions').insert(
+            customMissions.map((m) => ({
+              text: m.text,
+              event_id: eventData.id,
+              created_by: user.id,
+            }))
+          )
+          if (customErr) throw customErr
+        }
+
         // Insert named participants (if any) with access code retry
         let allParticipants = []
 
@@ -506,29 +583,15 @@ export default function CreateEvent() {
     setLaunching(false)
   }
 
-  async function assignMissionsToAll(participants, _eventId) {
-    // Get eligible missions — try with tag filter first, fallback to all.
-    // Pull category_id so the balanced selector can avoid per-participant repeats.
-    let missions = null
+  async function assignMissionsToAll(participants, eventId) {
+    // Library (tag-filtered, fallback to all) + this event's custom missions.
+    // category_id lets the balanced selector avoid per-participant repeats.
+    const missions = await fetchEligibleMissions(supabase, {
+      eventId,
+      tagFilters: selectedTags,
+    })
 
-    if (selectedTags.length > 0) {
-      const { data } = await supabase
-        .from('missions')
-        .select('id, category_id')
-        .eq('active', true)
-        .in('category_id', selectedTags)
-      missions = data
-    }
-
-    if (!missions || missions.length === 0) {
-      const { data } = await supabase
-        .from('missions')
-        .select('id, category_id')
-        .eq('active', true)
-      missions = data
-    }
-
-    if (!missions || missions.length === 0) return
+    if (missions.length === 0) return
 
     const missionCategoryById = {}
     missions.forEach((m) => { missionCategoryById[m.id] = m.category_id })
@@ -1408,17 +1471,18 @@ export default function CreateEvent() {
                 >
                   <div className="flex items-center justify-between mb-1">
                     <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', color: 'var(--color-text-secondary)' }}>
-                      {availableMissionCount} missions available
+                      {availableMissionCount + customMissions.length} missions available
+                      {customMissions.length > 0 && ` (incl. ${customMissions.length} custom)`}
                     </p>
                     <span
                       className="pq-badge"
                       style={{
                         fontFamily: 'var(--font-body)',
                         fontSize: '0.75rem',
-                        background: availableMissionCount === 0
+                        background: (availableMissionCount + customMissions.length) === 0
                           ? 'var(--color-danger-light)'
                           : 'var(--color-success-light)',
-                        color: availableMissionCount === 0
+                        color: (availableMissionCount + customMissions.length) === 0
                           ? 'var(--color-danger)'
                           : 'var(--color-success)',
                         border: 'none',
@@ -1430,13 +1494,76 @@ export default function CreateEvent() {
                   <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '0.375rem' }}>
                     Missions are distributed evenly. When all missions have been assigned once, they cycle again.
                   </p>
-                  {availableMissionCount === 0 && (
+                  {(availableMissionCount + customMissions.length) === 0 && (
                     <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.8rem', color: 'var(--color-danger)', marginTop: '0.375rem' }}>
-                      No missions match your selected categories.
+                      No missions match your selected categories. Add a custom mission or pick a category.
                     </p>
                   )}
                 </div>
               </div>
+            </div>
+
+            {/* --- Custom missions (optional) --- */}
+            <div className="pq-card" style={{ padding: '1.25rem 2rem' }}>
+              <label
+                className="block mb-1"
+                style={{ fontFamily: 'var(--font-body)', fontSize: '0.875rem', fontWeight: 600, color: 'var(--color-text)' }}
+              >
+                Your custom missions <span style={{ fontWeight: 400, color: 'var(--color-text-muted)' }}>(optional)</span>
+              </label>
+              <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: '0.75rem', lineHeight: 1.5 }}>
+                Add inside-joke or party-specific missions. They mix into the pool alongside the categories above and stay scoped to this event.
+              </p>
+
+              {customMissions.length > 0 && (
+                <div className="flex flex-col gap-1.5 mb-3">
+                  {customMissions.map((m, i) => (
+                    <div
+                      key={m.id || i}
+                      className="flex items-start justify-between gap-3 px-3 py-2"
+                      style={{ background: 'var(--color-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border-light)' }}
+                    >
+                      <span style={{ fontFamily: 'var(--font-body)', fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>{m.text}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeCustomMission(i)}
+                        className="pq-btn pq-btn-ghost shrink-0"
+                        style={{ padding: '2px 8px', fontSize: '0.9rem', lineHeight: 1, color: 'var(--color-text-muted)' }}
+                        title="Remove custom mission"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {customMissions.length < CUSTOM_MISSION_CAP ? (
+                <div className="flex items-start gap-2">
+                  <input
+                    type="text"
+                    value={newCustomMission}
+                    onChange={(e) => setNewCustomMission(e.target.value.slice(0, CUSTOM_MISSION_MAXLEN))}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomMission() } }}
+                    placeholder="e.g. Get a selfie with the birthday cake"
+                    className="pq-input flex-1"
+                    style={{ fontSize: '0.85rem' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={addCustomMission}
+                    disabled={!newCustomMission.trim() || savingCustom}
+                    className="pq-btn pq-btn-secondary shrink-0"
+                    style={{ fontSize: '0.8rem', padding: '0 14px' }}
+                  >
+                    {savingCustom ? 'Adding…' : 'Add'}
+                  </button>
+                </div>
+              ) : (
+                <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                  Custom mission limit ({CUSTOM_MISSION_CAP}) reached.
+                </p>
+              )}
             </div>
 
             {/* --- Hide Feed Toggle --- */}

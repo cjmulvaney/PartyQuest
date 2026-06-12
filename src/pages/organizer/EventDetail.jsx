@@ -9,6 +9,11 @@ import { normalizePhone } from '../../lib/phone.js'
 import Leaderboard from '../../components/Leaderboard.jsx'
 import ActivityFeed from '../../components/ActivityFeed.jsx'
 
+// Custom (event-scoped) missions: keep the list small enough not to distort
+// allocation, and the text short enough to fit a mission card.
+const CUSTOM_MISSION_CAP = 20
+const CUSTOM_MISSION_MAXLEN = 200
+
 export default function EventDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -33,6 +38,10 @@ export default function EventDetail() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [saving, setSaving] = useState(false)
   const [missionPool, setMissionPool] = useState([])
+  // Add custom (event-scoped) mission inline
+  const [addingCustomMission, setAddingCustomMission] = useState(false)
+  const [customMissionText, setCustomMissionText] = useState('')
+  const [savingCustomMission, setSavingCustomMission] = useState(false)
   const [organizerAccessCode, setOrganizerAccessCode] = useState(null)
   const [showQR, setShowQR] = useState(false)
   // Add participant inline
@@ -212,15 +221,69 @@ export default function EventDetail() {
     setMissionAssignments(assignments)
   }, [id])
 
-  // Load all missions in the pool (for sidebar)
+  // Load all missions in the pool (for sidebar).
+  // Two queries merged client-side: library rows (tag-filtered) + this event's
+  // custom rows (always in the pool, regardless of tag filters).
   const loadMissionPool = useCallback(async () => {
-    let query = supabase.from('missions').select('id, text, category_id, categories(name)').eq('active', true)
+    let libraryQuery = supabase
+      .from('missions')
+      .select('id, text, category_id, event_id, categories(name)')
+      .is('event_id', null)
+      .eq('active', true)
     if (config?.tag_filters?.length > 0) {
-      query = query.in('category_id', config.tag_filters)
+      libraryQuery = libraryQuery.in('category_id', config.tag_filters)
     }
-    const { data } = await query
-    setMissionPool(data || [])
-  }, [config])
+    const [{ data: library }, { data: custom }] = await Promise.all([
+      libraryQuery,
+      supabase
+        .from('missions')
+        .select('id, text, category_id, event_id, categories(name)')
+        .eq('event_id', id)
+        .eq('active', true),
+    ])
+    setMissionPool([...(library || []), ...(custom || [])])
+  }, [config, id])
+
+  // Add a custom (event-scoped) mission to the bank.
+  async function handleAddCustomMission() {
+    const text = customMissionText.trim()
+    if (!text) return
+    const customCount = missionPool.filter((m) => m.event_id).length
+    if (customCount >= CUSTOM_MISSION_CAP) {
+      setError(`Custom mission limit (${CUSTOM_MISSION_CAP}) reached for this event.`)
+      return
+    }
+    setSavingCustomMission(true)
+    setError('')
+    const { error: insertErr } = await supabase.from('missions').insert({
+      text: text.slice(0, CUSTOM_MISSION_MAXLEN),
+      event_id: id,
+      created_by: user?.id ?? null,
+    })
+    if (insertErr) {
+      setError(insertErr.message || 'Failed to add custom mission.')
+    } else {
+      setCustomMissionText('')
+      setAddingCustomMission(false)
+      await loadMissionPool()
+    }
+    setSavingCustomMission(false)
+  }
+
+  // Remove a custom mission. Deactivate if it's currently assigned (keeps
+  // participant_missions history intact); hard-delete otherwise.
+  async function handleDeleteCustomMission(mission) {
+    setError('')
+    const assigned = (poolWithCounts.find((m) => m.id === mission.id)?.assignCount || 0) > 0
+    const { error: delErr } = assigned
+      ? await supabase.from('missions').update({ active: false }).eq('id', mission.id)
+      : await supabase.from('missions').delete().eq('id', mission.id)
+    if (delErr) {
+      setError(delErr.message || 'Failed to remove custom mission.')
+      return
+    }
+    await loadMissionPool()
+  }
 
   // Sync local assignments from DB when not editing
   useEffect(() => {
@@ -951,17 +1014,27 @@ export default function EventDetail() {
   }
 
   async function assignMissionsToParticipant(participant, eventConfig) {
-    let query = supabase
+    // Library rows (tag-filtered) + this event's custom rows (always eligible).
+    let libraryQuery = supabase
       .from('missions')
       .select('id, category_id')
+      .is('event_id', null)
       .eq('active', true)
 
     if (eventConfig.tag_filters?.length > 0) {
-      query = query.in('category_id', eventConfig.tag_filters)
+      libraryQuery = libraryQuery.in('category_id', eventConfig.tag_filters)
     }
 
-    const { data: missions } = await query
-    if (!missions || missions.length === 0) return
+    const [{ data: library }, { data: custom }] = await Promise.all([
+      libraryQuery,
+      supabase
+        .from('missions')
+        .select('id, category_id')
+        .eq('event_id', id)
+        .eq('active', true),
+    ])
+    const missions = [...(library || []), ...(custom || [])]
+    if (missions.length === 0) return
 
     // Get existing assignment counts across the event for global balance
     const { data: allEventParticipants } = await supabase
@@ -2259,6 +2332,58 @@ export default function EventDetail() {
                     <p className="mt-1" style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem', fontFamily: 'var(--font-body)' }}>
                       {dragSource?.type === 'participant' ? 'Drop here to unassign' : 'Drag missions to participants, or click to assign'}
                     </p>
+                    {!isEnded && (
+                      addingCustomMission ? (
+                        <div className="mt-3">
+                          <textarea
+                            autoFocus
+                            value={customMissionText}
+                            onChange={(e) => setCustomMissionText(e.target.value.slice(0, CUSTOM_MISSION_MAXLEN))}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddCustomMission() }
+                              if (e.key === 'Escape') { setAddingCustomMission(false); setCustomMissionText('') }
+                            }}
+                            placeholder="e.g. Get a selfie with the birthday cake"
+                            rows={2}
+                            className="pq-input w-full"
+                            style={{ fontSize: '0.8125rem', resize: 'vertical' }}
+                          />
+                          <div className="flex items-center justify-between mt-1.5">
+                            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.6875rem', fontFamily: 'var(--font-body)' }}>
+                              {customMissionText.length}/{CUSTOM_MISSION_MAXLEN}
+                            </span>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => { setAddingCustomMission(false); setCustomMissionText('') }}
+                                className="pq-btn pq-btn-ghost"
+                                style={{ fontSize: '0.75rem', padding: '4px 10px' }}
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleAddCustomMission}
+                                disabled={!customMissionText.trim() || savingCustomMission}
+                                className="pq-btn pq-btn-primary"
+                                style={{ fontSize: '0.75rem', padding: '4px 10px' }}
+                              >
+                                {savingCustomMission ? 'Adding…' : 'Add'}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setAddingCustomMission(true)}
+                          className="pq-btn pq-btn-ghost mt-2"
+                          style={{ fontSize: '0.75rem', padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                        >
+                          <span style={{ fontSize: '0.95rem', lineHeight: 1 }}>+</span> Add custom mission
+                        </button>
+                      )
+                    )}
                   </div>
                   <div className="max-h-[70vh] overflow-y-auto">
                     {poolWithCounts.map((mission) => (
@@ -2295,25 +2420,44 @@ export default function EventDetail() {
                           <p style={{ fontSize: '0.875rem', color: 'var(--color-text-secondary)', fontFamily: 'var(--font-body)' }}>
                             {mission.text}
                           </p>
-                          {mission.categories?.name && (
+                          {mission.event_id ? (
+                            <span className="pq-badge" style={{ fontSize: '0.65rem', padding: '1px 6px', marginTop: '2px', display: 'inline-block', background: 'var(--color-primary-subtle)', color: 'var(--color-primary)' }}>
+                              Custom
+                            </span>
+                          ) : mission.categories?.name && (
                             <span className="pq-badge pq-badge-muted" style={{ fontSize: '0.65rem', padding: '1px 6px', marginTop: '2px', display: 'inline-block' }}>
                               {mission.categories.name}
                             </span>
                           )}
                         </div>
-                        <span
-                          className="shrink-0 px-1.5 py-0.5"
-                          style={{
-                            fontFamily: 'monospace',
-                            fontSize: '0.75rem',
-                            fontWeight: 600,
-                            borderRadius: 'var(--radius-sm)',
-                            background: mission.assignCount === 0 ? 'var(--color-surface)' : 'var(--color-success-light)',
-                            color: mission.assignCount === 0 ? 'var(--color-text-muted)' : 'var(--color-success)',
-                          }}
-                        >
-                          {mission.assignCount}
-                        </span>
+                        <div className="shrink-0 flex items-center gap-1.5">
+                          <span
+                            className="px-1.5 py-0.5"
+                            style={{
+                              fontFamily: 'monospace',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              borderRadius: 'var(--radius-sm)',
+                              background: mission.assignCount === 0 ? 'var(--color-surface)' : 'var(--color-success-light)',
+                              color: mission.assignCount === 0 ? 'var(--color-text-muted)' : 'var(--color-success)',
+                            }}
+                          >
+                            {mission.assignCount}
+                          </span>
+                          {mission.event_id && !isEnded && (
+                            <button
+                              type="button"
+                              title={mission.assignCount > 0 ? 'Remove from bank (assigned copies are kept)' : 'Delete custom mission'}
+                              onClick={(e) => { e.stopPropagation(); handleDeleteCustomMission(mission) }}
+                              onMouseDown={(e) => e.stopPropagation()}
+                              draggable={false}
+                              className="pq-btn pq-btn-ghost"
+                              style={{ padding: '2px 6px', fontSize: '0.85rem', lineHeight: 1, color: 'var(--color-text-muted)' }}
+                            >
+                              ×
+                            </button>
+                          )}
+                        </div>
                       </div>
                     ))}
                     {poolWithCounts.length === 0 && (

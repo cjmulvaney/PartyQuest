@@ -7,7 +7,7 @@
  * the original guest list.
  */
 
-import { generateCode, selectMissionsForParticipant } from './missions.js'
+import { generateCode, selectMissionsForParticipant, fetchEligibleMissions } from './missions.js'
 
 export async function cloneEvent(supabase, sourceEventId, organizerId) {
   // Fetch full settings from the DB — callers often hold partial rows
@@ -64,6 +64,25 @@ export async function cloneEvent(supabase, sourceEventId, organizerId) {
     if (configErr) throw configErr
   }
 
+  // Copy the source event's custom missions to the clone (new rows, new
+  // event_id) so the cloned pool is complete before assignment.
+  const { data: sourceCustom } = await supabase
+    .from('missions')
+    .select('text, category_id')
+    .eq('event_id', sourceEventId)
+    .eq('active', true)
+  if (sourceCustom && sourceCustom.length > 0) {
+    const { error: customErr } = await supabase.from('missions').insert(
+      sourceCustom.map((m) => ({
+        text: m.text,
+        category_id: m.category_id,
+        event_id: newEvent.id,
+        created_by: organizerId,
+      }))
+    )
+    if (customErr) throw customErr
+  }
+
   // Recreate active participants with fresh access codes
   const { data: sourceParticipants } = await supabase
     .from('participants')
@@ -87,31 +106,19 @@ export async function cloneEvent(supabase, sourceEventId, organizerId) {
   }
 
   if (newParticipants.length > 0 && config) {
-    await assignMissionsToClones(supabase, newParticipants, config)
+    await assignMissionsToClones(supabase, newParticipants, config, newEvent.id)
   }
 
   return newEvent
 }
 
-async function assignMissionsToClones(supabase, participants, config) {
-  // Eligible missions — tag filter first, fallback to all active
-  let missions = null
-  if (config.tag_filters?.length > 0) {
-    const { data } = await supabase
-      .from('missions')
-      .select('id, category_id')
-      .eq('active', true)
-      .in('category_id', config.tag_filters)
-    missions = data
-  }
-  if (!missions || missions.length === 0) {
-    const { data } = await supabase
-      .from('missions')
-      .select('id, category_id')
-      .eq('active', true)
-    missions = data
-  }
-  if (!missions || missions.length === 0) return
+async function assignMissionsToClones(supabase, participants, config, eventId) {
+  // Library (tag-filtered, fallback to all) + the clone's own custom missions.
+  const missions = await fetchEligibleMissions(supabase, {
+    eventId,
+    tagFilters: config.tag_filters,
+  })
+  if (missions.length === 0) return
 
   const schedule = config.unlock_type === 'timed' ? config.unlock_schedule : null
   const assignmentCounts = {}

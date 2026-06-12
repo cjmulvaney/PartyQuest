@@ -10,6 +10,8 @@ export default function MissionsPage() {
   const [selectedCategories, setSelectedCategories] = useState(new Set())
   const [selectedTags, setSelectedTags] = useState(new Set())
   const [statusFilter, setStatusFilter] = useState('all') // all | active | inactive
+  const [scopeView, setScopeView] = useState('library') // library | custom
+  const [customMissions, setCustomMissions] = useState([])
   const [search, setSearch] = useState('')
   const [editing, setEditing] = useState(null)
   const [showAdd, setShowAdd] = useState(false)
@@ -35,6 +37,7 @@ export default function MissionsPage() {
       supabase
         .from('missions')
         .select('id, text, active, tags, category_id, creator_name, categories(name)')
+        .is('event_id', null) // library only; event-scoped custom missions are managed per-event
         .order('created_at', { ascending: false }),
       supabase.from('categories').select('id, name, description').order('name'),
     ])
@@ -42,6 +45,14 @@ export default function MissionsPage() {
     if (cErr) toast.error(`Failed to load categories: ${cErr.message}`)
     setMissions(m || [])
     setCategories(c || [])
+
+    // Custom (event-scoped) missions — separate list, read-only here except delete
+    const { data: cm } = await supabase
+      .from('missions')
+      .select('id, text, active, event_id, events(name)')
+      .not('event_id', 'is', null)
+      .order('created_at', { ascending: false })
+    setCustomMissions(cm || [])
     if (c?.length && !newCategory) setNewCategory(c[0].id)
     // Default: all categories selected
     setSelectedCategories(new Set(c?.map((cat) => cat.id) || []))
@@ -75,6 +86,18 @@ export default function MissionsPage() {
     }
     setMissions((prev) => prev.filter((m) => m.id !== mission.id))
     toast.success('Mission permanently deleted')
+  }
+
+  // Admin abuse-cleanup delete for an event's custom mission.
+  async function deleteCustomMission(mission) {
+    if (!confirm(`Permanently delete this custom mission?\n\n"${mission.text.substring(0, 100)}"\n\nThis cannot be undone.`)) return
+    const { error } = await supabase.from('missions').delete().eq('id', mission.id)
+    if (error) {
+      toast.error(`Failed to delete custom mission: ${error.message}`)
+      return
+    }
+    setCustomMissions((prev) => prev.filter((m) => m.id !== mission.id))
+    toast.success('Custom mission deleted')
   }
 
   async function saveMission(id, text, categoryId, tags) {
@@ -542,6 +565,31 @@ export default function MissionsPage() {
         </div>
       )}
 
+      {/* Library / Custom scope toggle */}
+      <div
+        className="flex overflow-hidden w-fit"
+        style={{ borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}
+      >
+        {[['library', `Library (${missions.length})`], ['custom', `Custom (${customMissions.length})`]].map(([v, label]) => (
+          <button
+            key={v}
+            onClick={() => setScopeView(v)}
+            className="px-4 py-2 text-xs font-medium"
+            style={{
+              transition: 'var(--transition-fast)',
+              fontFamily: 'var(--font-body)',
+              backgroundColor: scopeView === v ? 'var(--color-primary)' : 'var(--color-surface)',
+              color: scopeView === v ? 'var(--color-text-inverse)' : 'var(--color-text-muted)',
+              border: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {scopeView === 'library' && (<>
       {/* Category toggles with edit/delete */}
       <div className="pq-card space-y-3">
         <div className="flex items-center justify-between">
@@ -732,6 +780,47 @@ export default function MissionsPage() {
         >
           No missions match your filters.
         </p>
+      )}
+      </>)}
+
+      {scopeView === 'custom' && (
+        <div className="space-y-2">
+          <p style={{ color: 'var(--color-text-muted)', fontFamily: 'var(--font-body)', fontSize: '0.875rem' }}>
+            Organizer-authored, event-scoped missions. Read-only here — delete is for abuse cleanup only.
+          </p>
+          {customMissions.map((m) => (
+            <div key={m.id} className="pq-card flex items-start justify-between gap-3" style={{ padding: '0.75rem 1rem' }}>
+              <div className="flex-1">
+                <p style={{ fontFamily: 'var(--font-body)', fontSize: '0.9rem', color: 'var(--color-text)', opacity: m.active ? 1 : 0.5 }}>
+                  {m.text}
+                </p>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="pq-badge pq-badge-muted" style={{ fontSize: '0.65rem' }}>
+                    {m.events?.name || 'Unknown event'}
+                  </span>
+                  {!m.active && (
+                    <span className="pq-badge pq-badge-muted" style={{ fontSize: '0.65rem' }}>inactive</span>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => deleteCustomMission(m)}
+                className="pq-btn pq-btn-ghost shrink-0"
+                style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem', color: 'var(--color-danger, #dc2626)' }}
+              >
+                Delete
+              </button>
+            </div>
+          ))}
+          {customMissions.length === 0 && (
+            <p
+              className="text-center py-4"
+              style={{ color: 'var(--color-text-muted)', fontFamily: 'var(--font-body)', fontSize: '0.875rem' }}
+            >
+              No custom missions yet.
+            </p>
+          )}
+        </div>
       )}
     </div>
   )

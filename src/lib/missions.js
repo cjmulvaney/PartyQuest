@@ -114,6 +114,54 @@ export function selectMissionsForParticipant(
 }
 
 /**
+ * Fetch the eligible mission pool for assigning missions in an event:
+ * library missions (event_id is null) matching the tag filters — falling back
+ * to all library missions when none match — plus this event's custom missions,
+ * which are always eligible regardless of tag filters.
+ *
+ * The `event_id is null` guard on the library queries is what keeps one event's
+ * custom missions from leaking into another event's pool.
+ *
+ * @param {Object} supabase - Supabase client
+ * @param {Object} opts
+ * @param {string} opts.eventId - Event UUID (custom missions are scoped to it)
+ * @param {Array<string>} [opts.tagFilters] - Category IDs to filter library by
+ * @returns {Promise<Array<{id: string, category_id: string|null}>>}
+ */
+export async function fetchEligibleMissions(supabase, { eventId, tagFilters = [] } = {}) {
+  let library = null
+  if (tagFilters?.length > 0) {
+    const { data } = await supabase
+      .from('missions')
+      .select('id, category_id')
+      .is('event_id', null)
+      .eq('active', true)
+      .in('category_id', tagFilters)
+    library = data
+  }
+  if (!library || library.length === 0) {
+    const { data } = await supabase
+      .from('missions')
+      .select('id, category_id')
+      .is('event_id', null)
+      .eq('active', true)
+    library = data
+  }
+
+  let custom = []
+  if (eventId) {
+    const { data } = await supabase
+      .from('missions')
+      .select('id, category_id')
+      .eq('event_id', eventId)
+      .eq('active', true)
+    custom = data || []
+  }
+
+  return [...(library || []), ...custom]
+}
+
+/**
  * Insert a participant with retry on access code collision (unique_violation 23505).
  *
  * @param {Object} supabase - Supabase client

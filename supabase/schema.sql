@@ -32,7 +32,7 @@ create table categories (
   created_at  timestamptz default now()
 );
 
--- Mission library
+-- Mission library (event_id null) + per-event custom missions (event_id set)
 create table missions (
   id           uuid primary key default uuid_generate_v4(),
   text         text not null,
@@ -40,6 +40,8 @@ create table missions (
   tags         text[] default '{}',
   active       boolean default true,
   creator_name text,                       -- v2.1: who created this mission
+  event_id     uuid references events(id) on delete cascade,        -- v3.10: set => custom mission scoped to this event; null => global library
+  created_by   uuid references auth.users(id) on delete set null,   -- v3.10: organizer who authored a custom mission
   created_at   timestamptz default now()
 );
 
@@ -179,6 +181,7 @@ create table admin_emails (
 -- ============================================================
 
 create index idx_missions_category                  on missions(category_id);
+create index idx_missions_event                     on missions(event_id);   -- v3.10: custom missions per event
 create index idx_events_organizer                   on events(organizer_id);
 create index idx_events_code                        on events(event_code);
 create index idx_events_status                      on events(status);
@@ -647,6 +650,30 @@ create trigger on_event_scheduled
   after insert or update of start_time on events
   for each row execute function schedule_sms_reminder();
 
+-- v3.10: cap custom (event-scoped) missions at 20 per event so a runaway list
+-- can't distort allocation. Aggregate check can't be a column constraint.
+create or replace function public.enforce_custom_mission_cap()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.event_id is not null then
+    -- count only active rows: matches the UI and the cap's purpose (only active
+    -- missions are allocated); deactivated customs don't count toward the limit.
+    if (select count(*) from missions where event_id = new.event_id and active = true) >= 20 then
+      raise exception 'Custom mission limit (20) reached for this event'
+        using errcode = 'check_violation';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_custom_mission_cap on missions;
+create trigger trg_custom_mission_cap
+  before insert on missions
+  for each row execute function enforce_custom_mission_cap();
+
 -- ============================================================
 -- ROW LEVEL SECURITY
 -- ============================================================
@@ -679,17 +706,45 @@ create policy "Admins can delete categories"
   on categories for delete using (is_admin());
 
 -- ─── missions ──────────────────────────────────────────────────
+-- Library rows (event_id null) are admin-managed; custom rows (event_id set)
+-- are managed by the organizer who owns the event. See v3.10-custom-missions.sql.
 create policy "Missions are readable"
   on missions for select using (active = true or is_admin());
 
-create policy "Admins can insert missions"
-  on missions for insert with check (is_admin());
+-- v3.10: organizers can read their own event's missions in any active state, so
+-- deactivating an assigned custom mission doesn't violate the select policy.
+create policy "Organizers read own-event missions"
+  on missions for select using (
+    event_id is not null and exists (
+      select 1 from events where events.id = missions.event_id
+        and events.organizer_id = (select auth.uid()))
+  );
 
-create policy "Admins can update missions"
-  on missions for update using (is_admin());
+create policy "Insert library or own-event missions"
+  on missions for insert with check (
+    (event_id is null and is_admin())
+    or (event_id is not null and exists (
+      select 1 from events where events.id = missions.event_id
+        and events.organizer_id = (select auth.uid())))
+  );
 
-create policy "Admins can delete missions"
-  on missions for delete using (is_admin());
+-- Admins manage all missions (library + any custom, for abuse cleanup);
+-- organizers manage only their own event's custom rows.
+create policy "Update library or own-event missions"
+  on missions for update using (
+    is_admin()
+    or (event_id is not null and exists (
+      select 1 from events where events.id = missions.event_id
+        and events.organizer_id = (select auth.uid())))
+  );
+
+create policy "Delete library or own-event missions"
+  on missions for delete using (
+    is_admin()
+    or (event_id is not null and exists (
+      select 1 from events where events.id = missions.event_id
+        and events.organizer_id = (select auth.uid())))
+  );
 
 -- ─── events ────────────────────────────────────────────────────
 -- v3.9: base table is organizer/admin-only; anon reads go through events_public

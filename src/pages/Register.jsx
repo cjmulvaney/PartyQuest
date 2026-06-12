@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
-import { selectMissionsForParticipant } from '../lib/missions.js'
+import { selectMissionsForParticipant, fetchEligibleMissions } from '../lib/missions.js'
 import { normalizePhone } from '../lib/phone.js'
 
 export default function Register() {
@@ -173,28 +173,13 @@ export default function Register() {
   }
 
   async function assignMissions(participant, config) {
-    // Try with tag filters first, fallback to all missions if none match
-    let missions = null
+    // Library (tag-filtered, fallback to all) + this event's custom missions.
+    const missions = await fetchEligibleMissions(supabase, {
+      eventId: event.id,
+      tagFilters: config.tag_filters,
+    })
 
-    if (config.tag_filters?.length > 0) {
-      const { data } = await supabase
-        .from('missions')
-        .select('id, category_id')
-        .eq('active', true)
-        .in('category_id', config.tag_filters)
-      missions = data
-    }
-
-    // Fallback: if no missions matched the tag filter, try all active missions
-    if (!missions || missions.length === 0) {
-      const { data } = await supabase
-        .from('missions')
-        .select('id, category_id')
-        .eq('active', true)
-      missions = data
-    }
-
-    if (!missions || missions.length === 0) return
+    if (missions.length === 0) return
 
     // Get existing assignment counts across all participants in this event
     // so we can use leveled round-robin (least-assigned missions first)
