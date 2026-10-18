@@ -149,19 +149,12 @@ export default function Register() {
         }
       }
 
-      // Fire-and-forget SMS if phone was provided
+      // Fire-and-forget SMS if phone was provided. The function reads the phone,
+      // name, and event from the DB; the access code proves we're this participant.
       if (normalizedPhone) {
         supabase.functions.invoke('send-participant-sms', {
-          body: {
-            participantId: participant.id,
-            phone: normalizedPhone,
-            name: name.trim(),
-            accessCode,
-            eventName: event.name,
-            eventCode: eventCode.toUpperCase().trim(),
-            scenario: 'self_register',
-          },
-        }).then(() => setSmsSent(true)).catch(() => {})
+          body: { participantId: participant.id, accessCode },
+        }).then(({ error }) => { if (!error) setSmsSent(true) }).catch(() => {})
       }
 
       setSuccess({ accessCode, participantId: participant.id })
